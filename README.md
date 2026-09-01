@@ -14,7 +14,7 @@ A minimalist, zero-ad background audio daemon for Windows. It operates silently 
 1. Download the latest `lofi_hud.exe` from the Releases page.
 2. Place the executable in a dedicated folder (e.g., `C:\Tools\LoFiHUD`).
 3. Run the application. It will automatically generate a `Lofi` folder and a `config.json` file in the same directory.
-4. Drop your `.mp3`, `.wav`, or `.flac` files into the newly created `Lofi` folder.
+4. Drop your `.mp3`, `.wav`, or `.flac` files into the newly created `Lofi` folder. One good source is [OpenLofi](https://github.com/btahir/open-lofi)
 5. Double-click the custom icon in your system tray to open Settings, configure your keybinds, and apply themes.
 
 ## Default Keybinds
