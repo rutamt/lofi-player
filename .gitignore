@@ -1,0 +1,21 @@
+# Python environments and cache
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# PyInstaller build directories and files
+build/
+dist/
+*.spec
+
+# Project specific local data
+config.json
+Lofi/
+*.log
+
+# Music Files
+*.mp3
+*.wav
