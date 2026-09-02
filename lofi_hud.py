@@ -5,6 +5,8 @@ import winreg
 import threading
 import random
 import urllib.parse
+import urllib.request
+import shutil
 import re
 import time
 import ctypes
@@ -19,7 +21,6 @@ from pystray import MenuItem as item
 
 # 0. WINDOWS DPI AWARENESS
 try:
-    # shcore is much more robust for Windows 10/11 multi-monitor scaling than user32
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
 except Exception:
     try:
@@ -53,6 +54,7 @@ default_config = {
     "key_next": "2",
     "key_prev": "1",
     "key_show_song": "3",
+    "key_ignore": "4",
     "key_vol_up": "up",
     "key_vol_down": "down",
     "volume": 50,
@@ -60,6 +62,7 @@ default_config = {
     "show_actions": True,
     "hud_position": "Bottom Center",
     "hud_timeout": 2000,
+    "hud_song_timeout": 3500,
     "theme": "Midnight Blue"
 }
 
@@ -84,6 +87,9 @@ config = load_config()
 if not os.path.exists(config["music_dir"]):
     try: os.makedirs(config["music_dir"])
     except: pass
+
+# Creates the Ignored folder parallel to the Music Directory to prevent os.walk from scanning it
+IGNORED_DIR = os.path.join(os.path.dirname(os.path.normpath(config["music_dir"])), 'Ignored_Lofi')
 
 # 2. AUTO-START REGISTRY INJECTION
 def enable_autostart():
@@ -125,6 +131,9 @@ def load_media():
     
     if os.path.exists(config["music_dir"]):
         for root_dir, dirs, files in os.walk(config["music_dir"]):
+            # Prevent scanning the ignored folder if user accidentally put it inside music_dir
+            if 'Ignored_Lofi' in root_dir: continue
+            
             for file in files:
                 if file.lower().endswith(valid_extensions):
                     song_paths.append(os.path.join(root_dir, file))
@@ -149,7 +158,7 @@ hud = tk.Toplevel(root)
 hud.overrideredirect(True)
 hud.attributes('-topmost', True)
 hud.attributes('-alpha', 0.0)
-hud.withdraw() # Start fully unmapped to prevent multi-monitor issues
+hud.withdraw() 
 
 hud_label = tk.Label(hud, text="", font=("Segoe UI", 13, "bold"), padx=25, pady=12)
 hud_label.pack(expand=True, fill='both')
@@ -158,15 +167,14 @@ hide_timer = None
 
 def hide_hud():
     hud.attributes('-alpha', 0.0)
-    hud.withdraw() # Completely unmaps window so it tracks back to main monitor on next wake
+    hud.withdraw() 
 
-def trigger_hud_internal(message):
+def trigger_hud_internal(message, duration_override=None):
     global hide_timer
     theme_data = THEMES[config["theme"]]
     hud.config(bg=theme_data["bg"])
     hud_label.config(bg=theme_data["bg"], fg=theme_data["fg"], text=message)
     
-    # Deiconify re-maps the window onto the current active screen
     hud.deiconify()
     hud.update_idletasks() 
     
@@ -194,11 +202,11 @@ def trigger_hud_internal(message):
     if hide_timer is not None:
         root.after_cancel(hide_timer)
     
-    timeout = config.get("hud_timeout", 2000)
+    timeout = duration_override if duration_override else config.get("hud_timeout", 2000)
     hide_timer = root.after(timeout, hide_hud)
 
-def safe_trigger_hud(message):
-    root.after(0, trigger_hud_internal, message)
+def safe_trigger_hud(message, duration_override=None):
+    root.after(0, trigger_hud_internal, message, duration_override)
 
 # 5. SMART SONG NAME TRACKER & GETTER
 def get_clean_song_name():
@@ -207,11 +215,21 @@ def get_clean_song_name():
     mrl = media.get_mrl()
     if not mrl: return None
     
-    clean_path = urllib.parse.unquote(mrl)
+    parsed_url = urllib.parse.urlparse(mrl)
+    clean_path = urllib.request.url2pathname(parsed_url.path)
     filename = os.path.basename(clean_path)
     display_name = os.path.splitext(filename)[0]
     display_name = re.sub(r'[-_]', ' ', display_name)
-    return re.sub(r'\s+', ' ', display_name).strip()
+    # Collapse spaces and apply Title Case
+    return re.sub(r'\s+', ' ', display_name).strip().title()
+
+def get_current_local_path():
+    media = media_player.get_media()
+    if not media: return None
+    mrl = media.get_mrl()
+    if not mrl: return None
+    parsed_url = urllib.parse.urlparse(mrl)
+    return urllib.request.url2pathname(parsed_url.path)
 
 last_played_mrl = None
 def track_monitor():
@@ -224,7 +242,7 @@ def track_monitor():
                 last_played_mrl = mrl
                 song_name = get_clean_song_name()
                 if song_name:
-                    safe_trigger_hud(f"🎵 Now Playing: {song_name}")
+                    safe_trigger_hud(f"🎵 Now Playing: {song_name}", config.get("hud_song_timeout", 3500))
     root.after(1000, track_monitor)
 
 root.after(1000, track_monitor)
@@ -270,9 +288,33 @@ def prev_track():
 def show_current_song():
     name = get_clean_song_name()
     if name:
-        safe_trigger_hud(f"🎵 {name}")
+        safe_trigger_hud(f"🎵 {name}", config.get("hud_song_timeout", 3500))
     else:
         safe_trigger_hud("No Song Playing")
+
+def ignore_current_song():
+    global is_playing
+    local_path = get_current_local_path()
+    song_name = get_clean_song_name()
+    
+    if local_path and os.path.exists(local_path):
+        try:
+            if not os.path.exists(IGNORED_DIR):
+                os.makedirs(IGNORED_DIR)
+            
+            dest_path = os.path.join(IGNORED_DIR, os.path.basename(local_path))
+            shutil.move(local_path, dest_path)
+            
+            # Remove from local session list so it doesn't play if VLC loops
+            if local_path in song_paths:
+                song_paths.remove(local_path)
+                
+            safe_trigger_hud(f"🗑 Removed: {song_name}", config.get("hud_song_timeout", 3500))
+            
+            list_player.next()
+            is_playing = True
+        except Exception:
+            safe_trigger_hud("❌ Failed to remove file")
 
 def change_volume(delta):
     config["volume"] = max(0, min(100, config["volume"] + delta))
@@ -337,6 +379,9 @@ def on_press(key):
     elif is_key_pressed("key_show_song") and 'show_song' not in handled_discrete:
         show_current_song()
         handled_discrete.add('show_song')
+    elif is_key_pressed("key_ignore") and 'ignore' not in handled_discrete:
+        ignore_current_song()
+        handled_discrete.add('ignore')
 
 def on_release(key):
     if key in pressed_keys:
@@ -373,7 +418,7 @@ def open_settings_window():
 
     settings_window = ctk.CTkToplevel(root)
     settings_window.title("LoFi HUD Settings")
-    settings_window.geometry("520x820")
+    settings_window.geometry("520x920") # Expanded to fit new options
     settings_window.attributes('-topmost', True)
     
     icon_path = os.path.join(bundle_path, 'icon.ico')
@@ -400,18 +445,23 @@ def open_settings_window():
     positions = ["Top Left", "Top Center", "Top Right", "Bottom Left", "Bottom Center", "Bottom Right", "Center"]
     ctk.CTkOptionMenu(row_pos, variable=pos_var, values=positions, width=180, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
 
-    row_time = create_row(card_display, "HUD Timeout:")
-    timeout_map = {1000: "1 Second", 2000: "2 Seconds", 3000: "3 Seconds", 5000: "5 Seconds"}
+    timeout_map = {1000: "1 Second", 1500: "1.5 Seconds", 2000: "2 Seconds", 3500: "3.5 Seconds", 5000: "5 Seconds"}
     rev_timeout = {v: k for k, v in timeout_map.items()}
+    
+    row_time = create_row(card_display, "Action HUD Timeout:")
     time_var = ctk.StringVar(value=timeout_map.get(config.get("hud_timeout", 2000), "2 Seconds"))
     ctk.CTkOptionMenu(row_time, variable=time_var, values=list(timeout_map.values()), width=180, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
+
+    row_song_time = create_row(card_display, "Song Info Timeout:")
+    song_time_var = ctk.StringVar(value=timeout_map.get(config.get("hud_song_timeout", 3500), "3.5 Seconds"))
+    ctk.CTkOptionMenu(row_song_time, variable=song_time_var, values=list(timeout_map.values()), width=180, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
 
     # --- CARD 2: BEHAVIOR ---
     card_behavior = create_card(scroll, "Behavior")
     now_playing_var = ctk.BooleanVar(value=config["show_now_playing"])
     actions_var = ctk.BooleanVar(value=config["show_actions"])
     
-    ctk.CTkSwitch(card_behavior, text="Show 'Now Playing' Song Titles", variable=now_playing_var, progress_color=accent_color).pack(anchor="w", padx=15, pady=8)
+    ctk.CTkSwitch(card_behavior, text="Auto Show 'Now Playing' when Track Changes", variable=now_playing_var, progress_color=accent_color).pack(anchor="w", padx=15, pady=8)
     ctk.CTkSwitch(card_behavior, text="Show Volume & Play/Pause HUD", variable=actions_var, progress_color=accent_color).pack(anchor="w", padx=15, pady=(8, 15))
 
     # --- CARD 3: MUSIC DIRECTORY ---
@@ -470,6 +520,7 @@ def open_settings_window():
     add_bind_row(card_keys, "Next Track:", "key_next")
     add_bind_row(card_keys, "Previous Track:", "key_prev")
     add_bind_row(card_keys, "Show Song Name:", "key_show_song")
+    add_bind_row(card_keys, "Remove/Ignore Song:", "key_ignore")
     add_bind_row(card_keys, "Volume Up:", "key_vol_up")
     add_bind_row(card_keys, "Volume Down:", "key_vol_down")
     
@@ -482,6 +533,7 @@ def open_settings_window():
         config["show_actions"] = actions_var.get()
         config["hud_position"] = pos_var.get()
         config["hud_timeout"] = rev_timeout.get(time_var.get(), 2000)
+        config["hud_song_timeout"] = rev_timeout.get(song_time_var.get(), 3500)
         config["music_dir"] = dir_entry.get()
         config["mod_key"] = mod_var.get().lower()
         save_config()
