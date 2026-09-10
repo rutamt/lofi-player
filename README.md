@@ -9,6 +9,7 @@ A minimalist, zero-ad background audio daemon for Windows. It operates silently 
 * **Modern Settings UI:** CustomTkinter interface with 5 unified themes, editable hotkey interceptors, and customizable HUD positioning.
 * **Smart String Cleaning:** Automatically strips out dashes, underscores, and file extensions from downloaded MP3s for a clean display.
 * **Auto-Start Integration:** Silently injects itself into the Windows boot registry.
+* **Auto-Pause:** Configure player to automatically pause playback when a chosen bluetooth device is disconnected.
 
 ## Installation & Usage
 1. Download the latest `lofi_hud.exe` from the Releases page.
@@ -22,6 +23,7 @@ A minimalist, zero-ad background audio daemon for Windows. It operates silently 
 * **Next Track:** `Alt + 2` (or hardware media next)
 * **Previous Track:** `Alt + 1` (or hardware media prev)
 * **Show Current Song:** `Alt + 3`
+* **Permanently Remove Current Song:** `Alt + 4`
 * **Volume Up/Down:** `Alt + Up Arrow` / `Alt + Down Arrow`
 
 ## Building from Source
@@ -34,12 +36,9 @@ A minimalist, zero-ad background audio daemon for Windows. It operates silently 
 **1. Install Dependencies:**
 ```bash
 pip install python-vlc pynput pystray pillow customtkinter
-
 ```
 
 **2. Compile Executable:**
 Run the following PyInstaller command to bundle the script and the icon into a single, headless executable:
-
 ```bash
 pyinstaller --onefile --noconsole --hidden-import "pynput.keyboard._win32" --icon="icon.ico" --add-data "icon.ico;." lofi_hud.py
-

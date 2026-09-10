@@ -63,6 +63,7 @@ default_config = {
     "hud_position": "Bottom Center",
     "hud_timeout": 2000,
     "hud_song_timeout": 3500,
+    "autopause_device": "Disabled",
     "theme": "Midnight Blue"
 }
 
@@ -88,7 +89,6 @@ if not os.path.exists(config["music_dir"]):
     try: os.makedirs(config["music_dir"])
     except: pass
 
-# Creates the Ignored folder parallel to the Music Directory to prevent os.walk from scanning it
 IGNORED_DIR = os.path.join(os.path.dirname(os.path.normpath(config["music_dir"])), 'Ignored_Lofi')
 
 # 2. AUTO-START REGISTRY INJECTION
@@ -104,7 +104,31 @@ def enable_autostart():
             pass
 enable_autostart()
 
-# 3. VLC INITIALIZATION
+# 3. NATIVE AUDIO DEVICE SCANNER
+def get_active_audio_devices():
+    """Bypasses COM bugs by reading active endpoints directly from the Windows Registry."""
+    devices = []
+    render_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render"
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, render_path) as key:
+            num_subkeys = winreg.QueryInfoKey(key)[0]
+            for i in range(num_subkeys):
+                try:
+                    guid = winreg.EnumKey(key, i)
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f"{render_path}\\{guid}") as dev_key:
+                        state, _ = winreg.QueryValueEx(dev_key, "DeviceState")
+                        if state == 1: # 1 = Active, 8 = Unplugged/Disabled
+                            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f"{render_path}\\{guid}\\Properties") as prop_key:
+                                # Windows internal GUID for PKEY_Device_FriendlyName
+                                name, _ = winreg.QueryValueEx(prop_key, "{b3f8fa53-0004-438e-9003-51a46e139bfc},6")
+                                devices.append(name)
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return devices
+
+# 4. VLC INITIALIZATION
 vlc_paths = [r"C:\Program Files\VideoLAN\VLC", r"C:\Program Files (x86)\VideoLAN\VLC"]
 vlc_found_path = None
 for path in vlc_paths:
@@ -131,9 +155,7 @@ def load_media():
     
     if os.path.exists(config["music_dir"]):
         for root_dir, dirs, files in os.walk(config["music_dir"]):
-            # Prevent scanning the ignored folder if user accidentally put it inside music_dir
             if 'Ignored_Lofi' in root_dir: continue
-            
             for file in files:
                 if file.lower().endswith(valid_extensions):
                     song_paths.append(os.path.join(root_dir, file))
@@ -148,7 +170,7 @@ def load_media():
 
 load_media()
 
-# 4. FULLY RESPONSIVE GUI & HUD SETUP
+# 5. FULLY RESPONSIVE GUI & HUD SETUP
 ctk.set_appearance_mode(THEMES[config["theme"]]["mode"])
 
 root = ctk.CTk()
@@ -208,7 +230,7 @@ def trigger_hud_internal(message, duration_override=None):
 def safe_trigger_hud(message, duration_override=None):
     root.after(0, trigger_hud_internal, message, duration_override)
 
-# 5. SMART SONG NAME TRACKER & GETTER
+# 6. SMART SONG NAME TRACKER
 def get_clean_song_name():
     media = media_player.get_media()
     if not media: return None
@@ -220,7 +242,6 @@ def get_clean_song_name():
     filename = os.path.basename(clean_path)
     display_name = os.path.splitext(filename)[0]
     display_name = re.sub(r'[-_]', ' ', display_name)
-    # Collapse spaces and apply Title Case
     return re.sub(r'\s+', ' ', display_name).strip().title()
 
 def get_current_local_path():
@@ -247,7 +268,27 @@ def track_monitor():
 
 root.after(1000, track_monitor)
 
-# 6. AUDIO CONTROLS
+# 7. BLUETOOTH / DEVICE DISCONNECT TRACKER
+was_device_present = False
+def device_monitor():
+    global was_device_present, is_playing
+    target = config.get("autopause_device", "Disabled")
+    
+    if target != "Disabled" and is_playing:
+        active_names = get_active_audio_devices()
+        
+        if target in active_names:
+            was_device_present = True
+        elif was_device_present:
+            force_pause()
+            safe_trigger_hud("⏸ Auto-Paused (Device Disconnected)", 5000)
+            was_device_present = False
+            
+    root.after(2000, device_monitor)
+
+root.after(2000, device_monitor)
+
+# 8. AUDIO CONTROLS
 is_playing = False
 
 def force_play():
@@ -287,10 +328,8 @@ def prev_track():
 
 def show_current_song():
     name = get_clean_song_name()
-    if name:
-        safe_trigger_hud(f"🎵 {name}", config.get("hud_song_timeout", 3500))
-    else:
-        safe_trigger_hud("No Song Playing")
+    if name: safe_trigger_hud(f"🎵 {name}", config.get("hud_song_timeout", 3500))
+    else: safe_trigger_hud("No Song Playing")
 
 def ignore_current_song():
     global is_playing
@@ -305,12 +344,10 @@ def ignore_current_song():
             dest_path = os.path.join(IGNORED_DIR, os.path.basename(local_path))
             shutil.move(local_path, dest_path)
             
-            # Remove from local session list so it doesn't play if VLC loops
             if local_path in song_paths:
                 song_paths.remove(local_path)
                 
             safe_trigger_hud(f"🗑 Removed: {song_name}", config.get("hud_song_timeout", 3500))
-            
             list_player.next()
             is_playing = True
         except Exception:
@@ -322,7 +359,7 @@ def change_volume(delta):
     if config["show_actions"]: safe_trigger_hud(f"🔊 Volume: {config['volume']}%")
     save_config() 
 
-# 7. DYNAMIC HOTKEY & MEDIA KEY TRACKER
+# 9. DYNAMIC HOTKEY & MEDIA KEY TRACKER
 pressed_keys = set()
 handled_discrete = set()
 is_binding = False 
@@ -391,7 +428,7 @@ def on_release(key):
 listener = keyboard.Listener(on_press=on_press, on_release=on_release)
 listener.start()
 
-# 8. MODERN CLEAN SETTINGS UI
+# 10. MODERN CLEAN SETTINGS UI
 settings_window = None
 
 def create_card(parent, title):
@@ -404,7 +441,7 @@ def create_card(parent, title):
 def create_row(parent, label_text):
     row = ctk.CTkFrame(parent, fg_color="transparent")
     row.pack(fill="x", padx=15, pady=8)
-    ctk.CTkLabel(row, text=label_text, width=140, anchor="w", font=("Segoe UI", 12)).pack(side="left")
+    ctk.CTkLabel(row, text=label_text, width=150, anchor="w", font=("Segoe UI", 12)).pack(side="left")
     return row
 
 def open_settings_window():
@@ -418,8 +455,9 @@ def open_settings_window():
 
     settings_window = ctk.CTkToplevel(root)
     settings_window.title("LoFi HUD Settings")
-    settings_window.geometry("520x920") # Expanded to fit new options
-    settings_window.attributes('-topmost', True)
+    settings_window.geometry("540x960")
+    
+    # Removed Topmost attribute so the window acts like normal and can be clicked away from
     
     icon_path = os.path.join(bundle_path, 'icon.ico')
     if os.path.exists(icon_path):
@@ -438,31 +476,42 @@ def open_settings_window():
     
     row_theme = create_row(card_display, "Active Theme:")
     theme_var = ctk.StringVar(value=config.get("theme", "Midnight Blue"))
-    ctk.CTkOptionMenu(row_theme, variable=theme_var, values=list(THEMES.keys()), width=180, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
+    ctk.CTkOptionMenu(row_theme, variable=theme_var, values=list(THEMES.keys()), width=220, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
     
     row_pos = create_row(card_display, "HUD Position:")
     pos_var = ctk.StringVar(value=config.get("hud_position", "Bottom Center"))
     positions = ["Top Left", "Top Center", "Top Right", "Bottom Left", "Bottom Center", "Bottom Right", "Center"]
-    ctk.CTkOptionMenu(row_pos, variable=pos_var, values=positions, width=180, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
+    ctk.CTkOptionMenu(row_pos, variable=pos_var, values=positions, width=220, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
 
     timeout_map = {1000: "1 Second", 1500: "1.5 Seconds", 2000: "2 Seconds", 3500: "3.5 Seconds", 5000: "5 Seconds"}
     rev_timeout = {v: k for k, v in timeout_map.items()}
     
     row_time = create_row(card_display, "Action HUD Timeout:")
     time_var = ctk.StringVar(value=timeout_map.get(config.get("hud_timeout", 2000), "2 Seconds"))
-    ctk.CTkOptionMenu(row_time, variable=time_var, values=list(timeout_map.values()), width=180, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
+    ctk.CTkOptionMenu(row_time, variable=time_var, values=list(timeout_map.values()), width=220, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
 
     row_song_time = create_row(card_display, "Song Info Timeout:")
     song_time_var = ctk.StringVar(value=timeout_map.get(config.get("hud_song_timeout", 3500), "3.5 Seconds"))
-    ctk.CTkOptionMenu(row_song_time, variable=song_time_var, values=list(timeout_map.values()), width=180, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
+    ctk.CTkOptionMenu(row_song_time, variable=song_time_var, values=list(timeout_map.values()), width=220, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
 
-    # --- CARD 2: BEHAVIOR ---
-    card_behavior = create_card(scroll, "Behavior")
+    # --- CARD 2: BEHAVIOR & AUDIO ---
+    card_behavior = create_card(scroll, "Behavior & Audio Devices")
     now_playing_var = ctk.BooleanVar(value=config["show_now_playing"])
     actions_var = ctk.BooleanVar(value=config["show_actions"])
     
     ctk.CTkSwitch(card_behavior, text="Auto Show 'Now Playing' when Track Changes", variable=now_playing_var, progress_color=accent_color).pack(anchor="w", padx=15, pady=8)
     ctk.CTkSwitch(card_behavior, text="Show Volume & Play/Pause HUD", variable=actions_var, progress_color=accent_color).pack(anchor="w", padx=15, pady=(8, 15))
+    
+    active_devices = get_active_audio_devices()
+
+    current_target = config.get("autopause_device", "Disabled")
+    opts = ["Disabled"] + active_devices
+    if current_target not in opts:
+        opts.append(current_target)
+
+    row_device = create_row(card_behavior, "Auto-Pause Device:")
+    device_var = ctk.StringVar(value=current_target)
+    ctk.CTkOptionMenu(row_device, variable=device_var, values=opts, width=220, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
 
     # --- CARD 3: MUSIC DIRECTORY ---
     card_dir = create_card(scroll, "Music Source")
@@ -534,6 +583,7 @@ def open_settings_window():
         config["hud_position"] = pos_var.get()
         config["hud_timeout"] = rev_timeout.get(time_var.get(), 2000)
         config["hud_song_timeout"] = rev_timeout.get(song_time_var.get(), 3500)
+        config["autopause_device"] = device_var.get()
         config["music_dir"] = dir_entry.get()
         config["mod_key"] = mod_var.get().lower()
         save_config()
@@ -549,7 +599,7 @@ def open_settings_window():
 def tray_open_settings(icon, item):
     root.after_idle(open_settings_window)
 
-# 9. EMBEDDED SYSTEM TRAY ICON
+# 11. EMBEDDED SYSTEM TRAY ICON
 def get_app_icon():
     icon_path = os.path.join(bundle_path, 'icon.ico')
     if os.path.exists(icon_path):
@@ -577,5 +627,5 @@ menu = pystray.Menu(
 tray_icon = pystray.Icon("LoFi HUD", get_app_icon(), "LoFi Player", menu)
 threading.Thread(target=tray_icon.run, daemon=True).start()
 
-# 10. RUN GUI MAIN LOOP
+# 12. RUN GUI MAIN LOOP
 root.mainloop()
