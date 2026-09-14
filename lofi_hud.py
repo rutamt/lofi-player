@@ -64,6 +64,7 @@ default_config = {
     "hud_timeout": 2000,
     "hud_song_timeout": 3500,
     "autopause_device": "Disabled",
+    "enable_hardware_keys": True,
     "theme": "Midnight Blue"
 }
 
@@ -106,7 +107,6 @@ enable_autostart()
 
 # 3. NATIVE AUDIO DEVICE SCANNER
 def get_active_audio_devices():
-    """Bypasses COM bugs by reading active endpoints directly from the Windows Registry."""
     devices = []
     render_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render"
     try:
@@ -117,9 +117,8 @@ def get_active_audio_devices():
                     guid = winreg.EnumKey(key, i)
                     with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f"{render_path}\\{guid}") as dev_key:
                         state, _ = winreg.QueryValueEx(dev_key, "DeviceState")
-                        if state == 1: # 1 = Active, 8 = Unplugged/Disabled
+                        if state == 1: 
                             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f"{render_path}\\{guid}\\Properties") as prop_key:
-                                # Windows internal GUID for PKEY_Device_FriendlyName
                                 name, _ = winreg.QueryValueEx(prop_key, "{b3f8fa53-0004-438e-9003-51a46e139bfc},6")
                                 devices.append(name)
                 except Exception:
@@ -376,14 +375,19 @@ def on_press(key):
     is_media_key = (key in (keyboard.Key.media_play_pause, keyboard.Key.media_next, keyboard.Key.media_previous) or vk in (176, 177, 178, 179, 250, 251))
     
     if is_media_key:
+        if not config.get("enable_hardware_keys", True):
+            return
+            
         if current_time - last_media_press < 0.3: return
         last_media_press = current_time
         
         if key == keyboard.Key.media_play_pause or vk == 179: toggle_audio()
         elif vk == 250: force_play()
         elif vk in (251, 178): force_pause()
-        elif key == keyboard.Key.media_next or vk == 176: next_track()
-        elif key == keyboard.Key.media_previous or vk == 177: prev_track()
+        elif key == keyboard.Key.media_next or vk == 176:
+            if is_playing: next_track()
+        elif key == keyboard.Key.media_previous or vk == 177:
+            if is_playing: prev_track()
         return
     
     mod = config["mod_key"].lower()
@@ -401,23 +405,27 @@ def on_press(key):
             if hasattr(k, 'name') and k.name and k.name.lower() == target: return True
         return False
 
-    if is_key_pressed("key_vol_up"): change_volume(5); return
-    elif is_key_pressed("key_vol_down"): change_volume(-5); return
+    if is_key_pressed("key_vol_up"): 
+        if is_playing: change_volume(5)
+        return
+    elif is_key_pressed("key_vol_down"): 
+        if is_playing: change_volume(-5)
+        return
         
     if is_key_pressed("key_play") and 'play' not in handled_discrete:
         toggle_audio()
         handled_discrete.add('play')
     elif is_key_pressed("key_prev") and 'prev' not in handled_discrete:
-        prev_track()
+        if is_playing: prev_track()
         handled_discrete.add('prev')
     elif is_key_pressed("key_next") and 'next' not in handled_discrete:
-        next_track()
+        if is_playing: next_track()
         handled_discrete.add('next')
     elif is_key_pressed("key_show_song") and 'show_song' not in handled_discrete:
-        show_current_song()
+        if is_playing: show_current_song()
         handled_discrete.add('show_song')
     elif is_key_pressed("key_ignore") and 'ignore' not in handled_discrete:
-        ignore_current_song()
+        if is_playing: ignore_current_song()
         handled_discrete.add('ignore')
 
 def on_release(key):
@@ -455,9 +463,7 @@ def open_settings_window():
 
     settings_window = ctk.CTkToplevel(root)
     settings_window.title("LoFi HUD Settings")
-    settings_window.geometry("540x960")
-    
-    # Removed Topmost attribute so the window acts like normal and can be clicked away from
+    settings_window.geometry("540x960") 
     
     icon_path = os.path.join(bundle_path, 'icon.ico')
     if os.path.exists(icon_path):
@@ -533,6 +539,9 @@ def open_settings_window():
     # --- CARD 4: KEYBINDS ---
     card_keys = create_card(scroll, "Keybinds")
     
+    hardware_keys_var = ctk.BooleanVar(value=config.get("enable_hardware_keys", True))
+    ctk.CTkSwitch(card_keys, text="Enable Hardware Media Keys", variable=hardware_keys_var, progress_color=accent_color).pack(anchor="w", padx=15, pady=(10, 5))
+
     row_mod = create_row(card_keys, "Hold Modifier:")
     mod_var = ctk.StringVar(value=config["mod_key"].upper())
     ctk.CTkOptionMenu(row_mod, variable=mod_var, values=["ALT", "CTRL", "SHIFT"], width=130, fg_color=accent_color, button_color=accent_color, button_hover_color=hover_color).pack(side="right")
@@ -584,6 +593,7 @@ def open_settings_window():
         config["hud_timeout"] = rev_timeout.get(time_var.get(), 2000)
         config["hud_song_timeout"] = rev_timeout.get(song_time_var.get(), 3500)
         config["autopause_device"] = device_var.get()
+        config["enable_hardware_keys"] = hardware_keys_var.get()
         config["music_dir"] = dir_entry.get()
         config["mod_key"] = mod_var.get().lower()
         save_config()
