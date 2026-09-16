@@ -358,11 +358,20 @@ def change_volume(delta):
     if config["show_actions"]: safe_trigger_hud(f"🔊 Volume: {config['volume']}%")
     save_config() 
 
-# 9. DYNAMIC HOTKEY & MEDIA KEY TRACKER
+# 9. BULLETPROOF HOTKEY & MEDIA KEY TRACKER
 pressed_keys = set()
 handled_discrete = set()
 is_binding = False 
 last_media_press = 0
+
+def check_target_key(event_key, cfg_key):
+    """Helper: Checks if the currently struck key perfectly matches the config key"""
+    target = config[cfg_key].lower()
+    if hasattr(event_key, 'char') and event_key.char and event_key.char.lower() == target: 
+        return True
+    if hasattr(event_key, 'name') and event_key.name and event_key.name.lower() == target: 
+        return True
+    return False
 
 def on_press(key):
     global last_media_press
@@ -398,40 +407,40 @@ def on_press(key):
     
     if not mod_pressed: return
 
-    def is_key_pressed(cfg_key):
-        target = config[cfg_key].lower()
-        for k in pressed_keys:
-            if hasattr(k, 'char') and k.char and k.char.lower() == target: return True
-            if hasattr(k, 'name') and k.name and k.name.lower() == target: return True
-        return False
-
-    if is_key_pressed("key_vol_up"): 
+    # ACTION EXECUTION (Based strictly on the single key that triggered this event)
+    if check_target_key(key, "key_vol_up"): 
         if is_playing: change_volume(5)
         return
-    elif is_key_pressed("key_vol_down"): 
+    elif check_target_key(key, "key_vol_down"): 
         if is_playing: change_volume(-5)
         return
         
-    if is_key_pressed("key_play") and 'play' not in handled_discrete:
+    if check_target_key(key, "key_play") and 'play' not in handled_discrete:
         toggle_audio()
         handled_discrete.add('play')
-    elif is_key_pressed("key_prev") and 'prev' not in handled_discrete:
+    elif check_target_key(key, "key_prev") and 'prev' not in handled_discrete:
         if is_playing: prev_track()
         handled_discrete.add('prev')
-    elif is_key_pressed("key_next") and 'next' not in handled_discrete:
+    elif check_target_key(key, "key_next") and 'next' not in handled_discrete:
         if is_playing: next_track()
         handled_discrete.add('next')
-    elif is_key_pressed("key_show_song") and 'show_song' not in handled_discrete:
+    elif check_target_key(key, "key_show_song") and 'show_song' not in handled_discrete:
         if is_playing: show_current_song()
         handled_discrete.add('show_song')
-    elif is_key_pressed("key_ignore") and 'ignore' not in handled_discrete:
+    elif check_target_key(key, "key_ignore") and 'ignore' not in handled_discrete:
         if is_playing: ignore_current_song()
         handled_discrete.add('ignore')
 
 def on_release(key):
     if key in pressed_keys:
         pressed_keys.remove(key)
-    handled_discrete.clear()
+        
+    # Only remove the discrete lock if the target action key is explicitly lifted
+    if check_target_key(key, "key_play"): handled_discrete.discard('play')
+    elif check_target_key(key, "key_prev"): handled_discrete.discard('prev')
+    elif check_target_key(key, "key_next"): handled_discrete.discard('next')
+    elif check_target_key(key, "key_show_song"): handled_discrete.discard('show_song')
+    elif check_target_key(key, "key_ignore"): handled_discrete.discard('ignore')
 
 listener = keyboard.Listener(on_press=on_press, on_release=on_release)
 listener.start()
