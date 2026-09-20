@@ -6,7 +6,7 @@ A minimalist, zero-ad background audio daemon for Windows. It operates silently 
 * **Ad-Free Local Playback:** Plays local audio files seamlessly on loop via the headless VLC engine.
 * **Global & Media Keybinds:** Control playback from any application using custom modifier hotkeys or physical headset/keyboard media buttons.
 * **Non-Intrusive HUD:** A fully responsive, DPI-aware Tkinter overlay that sizes dynamically to the song title and auto-hides.
-* **Modern Settings UI:** CustomTkinter interface with 5 unified themes, editable hotkey interceptors, and customizable HUD positioning.
+* **Modern Settings UI:** Tabbed CustomTkinter interface with six named palettes, editable hotkey interceptors, and customizable HUD positioning.
 * **Smart String Cleaning:** Automatically strips out dashes, underscores, and file extensions from downloaded MP3s for a clean display.
 * **Auto-Start Integration:** Silently injects itself into the Windows boot registry.
 * **Auto-Pause:** Configure player to automatically pause playback when a chosen bluetooth device is disconnected.
@@ -16,7 +16,7 @@ A minimalist, zero-ad background audio daemon for Windows. It operates silently 
 2. Place the executable in a dedicated folder (e.g., `C:\Tools\LoFiHUD`).
 3. Run the application. It will automatically generate a `Lofi` folder and a `config.json` file in the same directory.
 4. Drop your `.mp3`, `.wav`, or `.flac` files into the newly created `Lofi` folder. One good source is [OpenLofi](https://github.com/btahir/open-lofi)
-5. Double-click the custom icon in your system tray to open Settings, configure your keybinds, and apply themes.
+5. Double-click the custom icon in the system tray to open Settings, configure your keybinds, and apply themes.
 
 ## Default Keybinds
 * **Play/Pause:** `Alt + Q` (or hardware media play/pause)
@@ -25,6 +25,9 @@ A minimalist, zero-ad background audio daemon for Windows. It operates silently 
 * **Show Current Song:** `Alt + 3`
 * **Permanently Remove Current Song:** `Alt + 4`
 * **Volume Up/Down:** `Alt + Up Arrow` / `Alt + Down Arrow`
+
+## Themes
+Harbor Night, Polar Dusk, Canopy, Hanami, Paper, and Circuit. Existing `config.json` files that still name the older palettes (Midnight Blue, Nordic Clean, and so on) are mapped automatically.
 
 ## Building from Source
 
@@ -39,6 +42,7 @@ pip install python-vlc pynput pystray pillow customtkinter
 ```
 
 **2. Compile Executable:**
-Run the following PyInstaller command to bundle the script and the icon into a single, headless executable:
+Run the following PyInstaller command to bundle the script, the `lofi` package, and the icon into a single, headless executable:
 ```bash
-pyinstaller --onefile --noconsole --hidden-import "pynput.keyboard._win32" --icon="icon.ico" --add-data "icon.ico;." lofi_hud.py
+pyinstaller --onefile --noconsole --hidden-import "pynput.keyboard._win32" --hidden-import "lofi.app" --collect-submodules lofi --icon="icon.ico" --add-data "icon.ico;." lofi_hud.py
+```
