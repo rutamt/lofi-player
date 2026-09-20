@@ -33,6 +33,7 @@ class Tray:
         on_settings: Callable[[], None],
         on_toggle: Callable[[], None],
         on_next: Callable[[], None],
+        on_open_folder: Callable[[], None],
         on_exit: Callable[[], None],
     ) -> None:
         self._icon: Optional[pystray.Icon] = None
@@ -43,9 +44,18 @@ class Tray:
             item("Settings (Double-Click)", lambda _i, _j: on_settings(), default=True),
             item("Play/Pause", lambda _i, _j: on_toggle()),
             item("Next Track", lambda _i, _j: on_next()),
+            item("Open Music Folder", lambda _i, _j: on_open_folder()),
             item("Exit", lambda _i, _j: on_exit()),
         )
-        self._icon = pystray.Icon("LoFi HUD", load_icon(), "LoFi Player", menu)
+        self._icon = pystray.Icon("LoFi HUD", load_icon(), "LoFi HUD — Idle", menu)
+
+    def set_title(self, title: str) -> None:
+        if self._icon is not None:
+            try:
+                # Windows notify icon tooltip is capped at 128 characters
+                self._icon.title = title[:120]
+            except Exception:
+                pass
 
     def start(self) -> None:
         assert self._icon is not None
@@ -58,3 +68,4 @@ class Tray:
                 self._icon.stop()
             except Exception:
                 pass
+

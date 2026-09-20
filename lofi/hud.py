@@ -6,9 +6,10 @@ import ctypes
 from ctypes import wintypes
 import re
 import tkinter as tk
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import customtkinter as ctk
+from PIL import Image, ImageDraw
 
 from lofi.config import AppConfig
 from lofi.themes import Theme, get_theme
@@ -18,7 +19,6 @@ GWL_EXSTYLE = -20
 WS_EX_NOACTIVATE = 0x08000000
 DWMWA_WINDOW_CORNER_PREFERENCE = 33
 DWMWCP_ROUND = 2
-MONITOR_DEFAULTTONEAREST = 2
 
 
 class RECT(ctypes.Structure):
@@ -30,28 +30,14 @@ class RECT(ctypes.Structure):
     ]
 
 
-class MONITORINFO(ctypes.Structure):
-    _fields_ = [
-        ("cbSize", wintypes.DWORD),
-        ("rcMonitor", RECT),
-        ("rcWork", RECT),
-        ("dwFlags", wintypes.DWORD),
-    ]
-
-
-def _get_active_monitor_work_area() -> Tuple[int, int, int, int]:
-    """Return (left, top, width, height) of the active monitor's work area."""
+def _get_primary_monitor_work_area() -> Tuple[int, int, int, int]:
+    """Return (left, top, width, height) of the primary display's work area."""
     try:
         user32 = ctypes.windll.user32
-        hwnd = user32.GetForegroundWindow()
-        if hwnd:
-            hmon = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
-            if hmon:
-                mi = MONITORINFO()
-                mi.cbSize = ctypes.sizeof(MONITORINFO)
-                if user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
-                    rc = mi.rcWork
-                    return rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top
+        rc = RECT()
+        # SPI_GETWORKAREA = 0x0030 retrieves the work area of the primary display
+        if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rc), 0):
+            return rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top
     except Exception:
         pass
 
@@ -62,6 +48,107 @@ def _get_active_monitor_work_area() -> Tuple[int, int, int, int]:
         return 0, 0, 1920, 1080
 
 
+def _create_vector_icon(icon_type: str, color: str, size: int = 22) -> ctk.CTkImage:
+    """Render a crisp, antialiased vector icon with pixel-perfect centering."""
+    scale = 3
+    S = size * scale
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    c = color.lstrip("#")
+    rgb = tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
+    fill = rgb + (255,)
+    center = S / 2.0
+
+    if icon_type == "play":
+        hw = 5.0 * scale
+        hh = 7.0 * scale
+        pts = [
+            (center - hw * 0.7 + 1.2 * scale, center - hh),
+            (center - hw * 0.7 + 1.2 * scale, center + hh),
+            (center + hw * 1.2 + 1.2 * scale, center),
+        ]
+        draw.polygon(pts, fill=fill)
+    elif icon_type == "pause":
+        bw = 3.5 * scale
+        bh = 13.0 * scale
+        gap = 3.5 * scale
+        x1 = center - gap / 2.0 - bw
+        x2 = center + gap / 2.0
+        y1 = center - bh / 2.0
+        y2 = center + bh / 2.0
+        draw.rounded_rectangle([x1, y1, x1 + bw, y2], radius=1.5 * scale, fill=fill)
+        draw.rounded_rectangle([x2, y1, x2 + bw, y2], radius=1.5 * scale, fill=fill)
+    elif icon_type == "volume":
+        bx1 = center - 6.0 * scale
+        bx2 = center - 2.5 * scale
+        by1 = center - 3.0 * scale
+        by2 = center + 3.0 * scale
+        draw.rectangle([bx1, by1, bx2, by2], fill=fill)
+        cone = [
+            (bx2, by1),
+            (center + 1.5 * scale, center - 6.5 * scale),
+            (center + 1.5 * scale, center + 6.5 * scale),
+            (bx2, by2),
+        ]
+        draw.polygon(cone, fill=fill)
+        draw.arc(
+            [center - 2.5 * scale, center - 4.5 * scale, center + 4.5 * scale, center + 4.5 * scale],
+            start=300,
+            end=60,
+            fill=fill,
+            width=int(1.5 * scale),
+        )
+        draw.arc(
+            [center - 5.0 * scale, center - 7.5 * scale, center + 7.5 * scale, center + 7.5 * scale],
+            start=310,
+            end=50,
+            fill=fill,
+            width=int(1.5 * scale),
+        )
+    elif icon_type == "trash":
+        w = 10.0 * scale
+        h = 12.0 * scale
+        x1, x2 = center - w / 2, center + w / 2
+        y1, y2 = center - h / 2 + 1.5 * scale, center + h / 2
+        draw.rectangle([x1 - 1.5 * scale, y1 - 2.5 * scale, x2 + 1.5 * scale, y1 - 1.0 * scale], fill=fill)
+        draw.rectangle([center - 2.0 * scale, y1 - 4.0 * scale, center + 2.0 * scale, y1 - 2.5 * scale], fill=fill)
+        draw.rounded_rectangle([x1, y1, x2, y2], radius=1.5 * scale, fill=fill)
+    elif icon_type in ("settings", "check"):
+        pts = [
+            (center - 6.0 * scale, center),
+            (center - 1.5 * scale, center + 4.5 * scale),
+            (center + 6.0 * scale, center - 4.5 * scale),
+        ]
+        draw.line(pts, fill=fill, width=int(2.0 * scale), joint="curve")
+    elif icon_type == "error":
+        r = 5.0 * scale
+        draw.line([(center - r, center - r), (center + r, center + r)], fill=fill, width=int(2.0 * scale))
+        draw.line([(center - r, center + r), (center + r, center - r)], fill=fill, width=int(2.0 * scale))
+    else:  # music
+        r = 2.5 * scale
+        n1_x, n1_y = center - 4.5 * scale, center + 4.5 * scale
+        n2_x, n2_y = center + 4.0 * scale, center + 2.0 * scale
+        draw.ellipse([n1_x - r, n1_y - r * 0.8, n1_x + r, n1_y + r * 0.8], fill=fill)
+        draw.ellipse([n2_x - r, n2_y - r * 0.8, n2_x + r, n2_y + r * 0.8], fill=fill)
+        sw = 1.4 * scale
+        top_y = center - 6.0 * scale
+        draw.rectangle([n1_x + r - sw, top_y, n1_x + r, n1_y], fill=fill)
+        draw.rectangle([n2_x + r - sw, top_y - 2.0 * scale, n2_x + r, n2_y], fill=fill)
+        draw.polygon(
+            [
+                (n1_x + r - sw, top_y),
+                (n2_x + r, top_y - 2.0 * scale),
+                (n2_x + r, top_y),
+                (n1_x + r - sw, top_y + 2.0 * scale),
+            ],
+            fill=fill,
+        )
+
+    resized = img.resize((size, size), Image.Resampling.LANCZOS)
+    return ctk.CTkImage(light_image=resized, dark_image=resized, size=(size, size))
+
+
 def _parse_message(
     message: str,
     badge: Optional[str] = None,
@@ -69,7 +156,7 @@ def _parse_message(
     icon: Optional[str] = None,
     progress: Optional[int] = None,
 ) -> Tuple[str, str, str, Optional[int]]:
-    """Parse message string into (icon, badge, title, progress)."""
+    """Parse message string into (icon_name, badge, title, progress)."""
     if badge is not None and title is not None and icon is not None:
         return icon, badge, title, progress
 
@@ -77,50 +164,50 @@ def _parse_message(
     vol_match = re.search(r"Volume:\s*(\d+)%", message, re.IGNORECASE)
     if vol_match:
         val = int(vol_match.group(1))
-        return "🔊", "VOLUME", f"{val}%", val
+        return "volume", "VOLUME", f"{val}%", val
 
     # Now playing with prefix: "🎵 Now Playing: Song Name"
     np_match = re.match(r"^🎵\s*Now Playing:\s*(.+)$", message)
     if np_match:
-        return "🎵", "NOW PLAYING", np_match.group(1).strip(), None
+        return "music", "NOW PLAYING", np_match.group(1).strip(), None
 
     # Track info: "🎵 Song Name"
     song_match = re.match(r"^🎵\s*(.+)$", message)
     if song_match:
-        return "🎵", "NOW PLAYING", song_match.group(1).strip(), None
+        return "music", "NOW PLAYING", song_match.group(1).strip(), None
 
     # Playback states
     if "▶" in message or "Resumed" in message:
-        return "▶", "PLAYBACK", "Resumed", None
+        return "play", "PLAYBACK", "Resumed", None
     if "Auto-Paused" in message:
-        return "⏸", "AUTO-PAUSED", "Device Disconnected", None
+        return "pause", "AUTO-PAUSED", "Device Disconnected", None
     if "⏸" in message or "Paused" in message:
-        return "⏸", "PLAYBACK", "Paused", None
+        return "pause", "PLAYBACK", "Paused", None
 
     # Removed song
     rem_match = re.match(r"^🗑\s*Removed:\s*(.+)$", message)
     if rem_match:
-        return "🗑", "REMOVED", rem_match.group(1).strip(), None
+        return "trash", "REMOVED", rem_match.group(1).strip(), None
 
     # Error
     if "❌" in message or "Failed" in message:
         clean = message.replace("❌", "").strip()
-        return "❌", "ERROR", clean, None
+        return "error", "ERROR", clean, None
 
     if "Folder Empty" in message:
-        return "📁", "LIBRARY", "Folder Empty: Add MP3s", None
+        return "music", "LIBRARY", "Folder Empty: Add MP3s", None
 
     if "Settings Saved" in message:
-        return "⚙", "SETTINGS", "Settings Saved!", None
+        return "check", "SETTINGS", "Settings Saved!", None
 
     if "VLC" in message:
-        return "⚠️", "ERROR", message, None
+        return "error", "ERROR", message, None
 
-    return icon or "🎵", badge or "LOFI HUD", title or message, progress
+    return icon or "music", badge or "LOFI HUD", title or message, progress
 
 
 class Hud:
-    """Modern floating toast overlay with clean rounded pill design and no-flicker updates."""
+    """Modern floating toast overlay anchored to main display with clean vector icons."""
 
     def __init__(self, root: tk.Misc) -> None:
         self._root = root
@@ -128,6 +215,7 @@ class Hud:
         self._fade_timer: Optional[str] = None
         self._target_alpha = 0.98
         self._is_visible = False
+        self._icon_cache: Dict[Tuple[str, str], ctk.CTkImage] = {}
 
         self._window = ctk.CTkToplevel(root)
         self._window.overrideredirect(True)
@@ -158,14 +246,13 @@ class Hud:
 
         self._icon_label = ctk.CTkLabel(
             self._icon_box,
-            text="🎵",
-            font=("Segoe UI", 20),
+            text="",
         )
         self._icon_label.place(relx=0.5, rely=0.5, anchor="center")
 
-        # Right: Content
+        # Right: Content - vertically centered
         self._content = ctk.CTkFrame(self._container, fg_color="transparent")
-        self._content.pack(side="left", fill="both", expand=True, padx=(0, 14), pady=8)
+        self._content.pack(side="left", fill="x", expand=True, padx=(0, 14))
 
         # Header: badge + optional percentage
         self._header = ctk.CTkFrame(self._content, fg_color="transparent")
@@ -176,6 +263,7 @@ class Hud:
             text="NOW PLAYING",
             font=("Segoe UI", 9, "bold"),
             anchor="w",
+            height=0,
         )
         self._badge_label.pack(side="left")
 
@@ -184,6 +272,7 @@ class Hud:
             text="",
             font=("Segoe UI", 9, "bold"),
             anchor="e",
+            height=0,
         )
 
         # Main: Title
@@ -192,8 +281,9 @@ class Hud:
             text="",
             font=("Segoe UI", 14, "bold"),
             anchor="w",
+            height=0,
         )
-        self._title_label.pack(fill="x", pady=(1, 0))
+        self._title_label.pack(fill="x", pady=(2, 0))
 
         # Progress bar for volume
         self._progress_bar = ctk.CTkProgressBar(
@@ -208,7 +298,7 @@ class Hud:
         try:
             hwnd = ctypes.windll.user32.GetParent(self._window.winfo_id()) or self._window.winfo_id()
 
-            # Prevent stealing focus from the active window
+            # Prevent stealing focus from active window
             ex_style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
             ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_NOACTIVATE)
 
@@ -222,6 +312,7 @@ class Hud:
 
     def apply_theme(self, theme: Theme) -> None:
         """Apply theme color tokens across the HUD components."""
+        self._theme = theme
         self._window.configure(fg_color=theme.surface)
         self._container.configure(
             fg_color=theme.surface,
@@ -231,7 +322,6 @@ class Hud:
             fg_color=theme.bg,
             border_color=theme.border,
         )
-        self._icon_label.configure(text_color=theme.accent)
         self._badge_label.configure(text_color=theme.accent)
         self._percent_label.configure(text_color=theme.muted)
         self._title_label.configure(text_color=theme.fg)
@@ -239,6 +329,12 @@ class Hud:
             fg_color=theme.surface_alt,
             progress_color=theme.accent,
         )
+
+    def _get_icon(self, icon_name: str, color: str) -> ctk.CTkImage:
+        key = (icon_name, color)
+        if key not in self._icon_cache:
+            self._icon_cache[key] = _create_vector_icon(icon_name, color, size=22)
+        return self._icon_cache[key]
 
     def show(
         self,
@@ -259,7 +355,8 @@ class Hud:
             message, badge=badge, title=title, icon=icon, progress=progress
         )
 
-        self._icon_label.configure(text=icon_val)
+        icon_img = self._get_icon(icon_val, theme.accent)
+        self._icon_label.configure(image=icon_img)
         self._badge_label.configure(text=badge_val)
 
         if prog_val is not None:
@@ -289,7 +386,8 @@ class Hud:
         self._window.update_idletasks()
         hud_h = max(68, self._window.winfo_reqheight())
 
-        mon_x, mon_y, mon_w, mon_h = _get_active_monitor_work_area()
+        # Anchored strictly to the primary (main) display
+        mon_x, mon_y, mon_w, mon_h = _get_primary_monitor_work_area()
 
         pad_x, pad_y = 30, 40
         pos = config.hud_position
@@ -343,13 +441,19 @@ class Hud:
         self._fade_out(4)
 
     def _fade_out(self, step: int) -> None:
-        total_steps = 4
-        if step >= 0:
-            alpha = self._target_alpha * (step / float(total_steps))
-            self._window.attributes("-alpha", alpha)
-            self._fade_timer = self._root.after(25, self._fade_out, step - 1)
-        else:
+        try:
+            if not self._window.winfo_exists():
+                self._fade_timer = None
+                return
+            total_steps = 4
+            if step >= 0:
+                alpha = self._target_alpha * (step / float(total_steps))
+                self._window.attributes("-alpha", alpha)
+                self._fade_timer = self._root.after(25, self._fade_out, step - 1)
+            else:
+                self._fade_timer = None
+                self._is_visible = False
+                self._window.attributes("-alpha", 0.0)
+                self._window.withdraw()
+        except Exception:
             self._fade_timer = None
-            self._is_visible = False
-            self._window.attributes("-alpha", 0.0)
-            self._window.withdraw()

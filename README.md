@@ -27,7 +27,7 @@ A minimalist, zero-ad background audio daemon for Windows. It operates silently 
 * **Volume Up/Down:** `Alt + Up Arrow` / `Alt + Down Arrow`
 
 ## Themes
-Harbor Night, Polar Dusk, Canopy, Hanami, Paper, and Circuit. Existing `config.json` files that still name the older palettes (Midnight Blue, Nordic Clean, and so on) are mapped automatically.
+Harbor Night, Tokyo Night, Rosé Pine, Polar Dusk, Gruvbox Warm, and Catppuccin Latte. Existing `config.json` files that still name the older palettes (Canopy, Hanami, Paper, Circuit, and others) are mapped automatically.
 
 ## Building from Source
 

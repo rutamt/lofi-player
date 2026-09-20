@@ -49,7 +49,7 @@ PAD = 16
 
 
 class SettingsController:
-    """Owns the singleton settings Toplevel."""
+    """Owns the singleton settings Toplevel and remembers window position."""
 
     def __init__(
         self,
@@ -65,6 +65,7 @@ class SettingsController:
         self._get_devices = get_devices
         self._set_binding = set_binding
         self._window: Optional[ctk.CTkToplevel] = None
+        self._last_geometry: Optional[str] = None
 
     def open(self) -> None:
         if self._window is not None and self._window.winfo_exists():
@@ -77,9 +78,12 @@ class SettingsController:
             self._get_devices,
             self._set_binding,
             on_close=self._on_close,
+            initial_geometry=self._last_geometry,
         )
 
-    def _on_close(self) -> None:
+    def _on_close(self, geometry: Optional[str] = None) -> None:
+        if geometry:
+            self._last_geometry = geometry
         self._window = None
 
 
@@ -91,7 +95,8 @@ class SettingsWindow(ctk.CTkToplevel):
         on_save: Callable[[AppConfig], None],
         get_devices: Callable[[], List[str]],
         set_binding: Callable[[bool], None],
-        on_close: Callable[[], None],
+        on_close: Callable[[Optional[str]], None],
+        initial_geometry: Optional[str] = None,
     ) -> None:
         super().__init__(root)
         self._config = config
@@ -110,8 +115,23 @@ class SettingsWindow(ctk.CTkToplevel):
             "key_vol_down": config.key_vol_down,
         }
 
+        # Themeable element registry for live updating
+        self._cards: List[ctk.CTkFrame] = []
+        self._labels: List[ctk.CTkLabel] = []
+        self._menus: List[ctk.CTkOptionMenu] = []
+        self._switches: List[ctk.CTkSwitch] = []
+        self._buttons: List[ctk.CTkButton] = []
+        self._entries: List[ctk.CTkEntry] = []
+
         self.title("LoFi HUD Settings")
-        self.geometry("640x720")
+        if initial_geometry:
+            self.geometry(initial_geometry)
+        else:
+            sw = self.winfo_screenwidth()
+            sh = self.winfo_screenheight()
+            x = max(0, (sw - 640) // 2)
+            y = max(0, (sh - 720) // 2)
+            self.geometry(f"640x720+{x}+{y}")
         self.minsize(600, 640)
         self.protocol("WM_DELETE_WINDOW", self._destroy)
 
@@ -129,44 +149,45 @@ class SettingsWindow(ctk.CTkToplevel):
 
         header = ctk.CTkFrame(outer, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        ctk.CTkLabel(
+        self._header_title = ctk.CTkLabel(
             header,
             text="LoFi HUD",
             font=("Segoe UI", 24, "bold"),
             text_color=theme.fg,
-        ).pack(anchor="w")
-        ctk.CTkLabel(
+        )
+        self._header_title.pack(anchor="w")
+        self._header_sub = ctk.CTkLabel(
             header,
             text="Playback, overlay, and hotkeys",
             font=("Segoe UI", 13),
             text_color=theme.muted,
-        ).pack(anchor="w", pady=(2, 0))
+        )
+        self._header_sub.pack(anchor="w", pady=(2, 0))
 
-        unselected = theme.muted if theme.appearance == "light" else theme.surface_alt
-        tabs = ctk.CTkTabview(
+        self._tabs = ctk.CTkTabview(
             outer,
             corner_radius=CARD_RADIUS,
             fg_color=theme.surface,
             segmented_button_fg_color=theme.surface_alt,
             segmented_button_selected_color=theme.accent,
             segmented_button_selected_hover_color=theme.accent_hover,
-            segmented_button_unselected_color=unselected,
+            segmented_button_unselected_color=theme.surface_alt,
             segmented_button_unselected_hover_color=theme.border,
             text_color="#fafafa",
             text_color_disabled=theme.muted,
         )
-        tabs.grid(row=1, column=0, sticky="nsew")
-        tabs.add("Appearance")
-        tabs.add("Playback")
-        tabs.add("Controls")
+        self._tabs.grid(row=1, column=0, sticky="nsew")
+        self._tabs.add("Appearance")
+        self._tabs.add("Playback")
+        self._tabs.add("Controls")
 
-        self._build_appearance(tabs.tab("Appearance"))
-        self._build_playback(tabs.tab("Playback"), get_devices())
-        self._build_controls(tabs.tab("Controls"))
+        self._build_appearance(self._tabs.tab("Appearance"))
+        self._build_playback(self._tabs.tab("Playback"), get_devices())
+        self._build_controls(self._tabs.tab("Controls"))
 
         footer = ctk.CTkFrame(outer, fg_color="transparent")
         footer.grid(row=2, column=0, sticky="ew", pady=(16, 0))
-        ctk.CTkButton(
+        self._save_btn = ctk.CTkButton(
             footer,
             text="Save & Apply",
             command=self._save,
@@ -176,13 +197,76 @@ class SettingsWindow(ctk.CTkToplevel):
             fg_color=theme.accent,
             hover_color=theme.accent_hover,
             text_color=theme.accent_on_accent,
-        ).pack(fill="x")
-        ctk.CTkLabel(
+        )
+        self._save_btn.pack(fill="x")
+        self._footer_lbl = ctk.CTkLabel(
             footer,
-            text="Created by Tasga & Gemini",
+            text="Created by Rutam and Gemini",
             font=("Segoe UI", 11),
             text_color=theme.muted,
-        ).pack(pady=(8, 0))
+        )
+        self._footer_lbl.pack(pady=(8, 0))
+
+    def apply_theme(self, theme: Theme) -> None:
+        """Dynamically re-color all widgets in-place without closing or flickering."""
+        self._theme = theme
+        self.configure(fg_color=theme.bg)
+        self._header_title.configure(text_color=theme.fg)
+        self._header_sub.configure(text_color=theme.muted)
+
+        self._tabs.configure(
+            fg_color=theme.surface,
+            segmented_button_fg_color=theme.surface_alt,
+            segmented_button_selected_color=theme.accent,
+            segmented_button_selected_hover_color=theme.accent_hover,
+            segmented_button_unselected_color=theme.surface_alt,
+            segmented_button_unselected_hover_color=theme.border,
+        )
+
+        for card in self._cards:
+            card.configure(fg_color=theme.surface_alt)
+
+        for lbl in self._labels:
+            lbl.configure(text_color=theme.fg)
+
+        for menu in self._menus:
+            menu.configure(
+                fg_color=theme.accent,
+                button_color=theme.accent,
+                button_hover_color=theme.accent_hover,
+                text_color=theme.accent_on_accent,
+                dropdown_fg_color=theme.surface,
+                dropdown_hover_color=theme.surface_alt,
+                dropdown_text_color=theme.fg,
+            )
+
+        for switch in self._switches:
+            switch.configure(
+                progress_color=theme.accent,
+                button_color=theme.fg,
+                text_color=theme.fg,
+            )
+
+        for btn in self._buttons:
+            btn.configure(
+                fg_color=theme.accent,
+                hover_color=theme.accent_hover,
+                text_color=theme.accent_on_accent,
+            )
+
+        for entry in self._entries:
+            entry.configure(
+                fg_color=theme.surface,
+                border_color=theme.border,
+                text_color=theme.fg,
+            )
+
+        self._save_btn.configure(
+            fg_color=theme.accent,
+            hover_color=theme.accent_hover,
+            text_color=theme.accent_on_accent,
+        )
+        self._footer_lbl.configure(text_color=theme.muted)
 
     def _try_icon(self, path: str) -> None:
         try:
@@ -198,29 +282,41 @@ class SettingsWindow(ctk.CTkToplevel):
             fg_color=theme.surface_alt,
         )
         card.pack(fill="x", padx=8, pady=(8, 4))
-        ctk.CTkLabel(
+        title_lbl = ctk.CTkLabel(
             card,
             text=title,
             font=("Segoe UI", 14, "bold"),
             text_color=theme.fg,
-        ).pack(anchor="w", padx=PAD, pady=(PAD, 6))
+        )
+        title_lbl.pack(anchor="w", padx=PAD, pady=(PAD, 6))
+        self._cards.append(card)
+        self._labels.append(title_lbl)
         return card
 
     def _row(self, parent: tk.Misc, label: str) -> ctk.CTkFrame:
         row = ctk.CTkFrame(parent, fg_color="transparent")
         row.pack(fill="x", padx=PAD, pady=6)
         row.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(
+        row_lbl = ctk.CTkLabel(
             row,
             text=label,
             width=LABEL_WIDTH,
             anchor="w",
             font=("Segoe UI", 12),
             text_color=self._theme.fg,
-        ).grid(row=0, column=0, sticky="w")
+        )
+        row_lbl.grid(row=0, column=0, sticky="w")
+        self._labels.append(row_lbl)
         return row
 
-    def _menu(self, parent: tk.Misc, variable: ctk.StringVar, values: List[str], width: int = CONTROL_WIDTH) -> ctk.CTkOptionMenu:
+    def _menu(
+        self,
+        parent: tk.Misc,
+        variable: ctk.StringVar,
+        values: List[str],
+        width: int = CONTROL_WIDTH,
+        command: Optional[Callable[[str], None]] = None,
+    ) -> ctk.CTkOptionMenu:
         theme = self._theme
         menu = ctk.CTkOptionMenu(
             parent,
@@ -234,9 +330,30 @@ class SettingsWindow(ctk.CTkToplevel):
             dropdown_fg_color=theme.surface,
             dropdown_hover_color=theme.surface_alt,
             dropdown_text_color=theme.fg,
+            command=command,
         )
         menu.grid(row=0, column=1, sticky="e")
+        self._menus.append(menu)
         return menu
+
+    def _switch(self, parent: tk.Misc, text: str, variable: ctk.BooleanVar, pady: Tuple[int, int] = (0, 8)) -> ctk.CTkSwitch:
+        theme = self._theme
+        switch = ctk.CTkSwitch(
+            parent,
+            text=text,
+            variable=variable,
+            progress_color=theme.accent,
+            button_color=theme.fg,
+            font=("Segoe UI", 12),
+            text_color=theme.fg,
+        )
+        switch.pack(anchor="w", padx=PAD, pady=pady)
+        self._switches.append(switch)
+        return switch
+
+    def _on_theme_select(self, label: str) -> None:
+        new_theme = get_theme(theme_id_for_label(label))
+        self.apply_theme(new_theme)
 
     def _build_appearance(self, parent: tk.Misc) -> None:
         config = self._config
@@ -245,7 +362,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
         row = self._row(card, "Active Theme")
         self._theme_var = ctk.StringVar(value=theme.label)
-        self._menu(row, self._theme_var, theme_labels())
+        self._menu(row, self._theme_var, theme_labels(), command=self._on_theme_select)
 
         row = self._row(card, "HUD Position")
         self._pos_var = ctk.StringVar(value=config.hud_position)
@@ -266,29 +383,15 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _build_playback(self, parent: tk.Misc, devices: List[str]) -> None:
         config = self._config
-        theme = self._theme
-        card = self._card(parent, "Behavior")
+        card = self._card(parent, "Behavior & System")
 
         self._now_playing_var = ctk.BooleanVar(value=config.show_now_playing)
         self._actions_var = ctk.BooleanVar(value=config.show_actions)
-        ctk.CTkSwitch(
-            card,
-            text="Auto-show Now Playing when the track changes",
-            variable=self._now_playing_var,
-            progress_color=theme.accent,
-            button_color=theme.fg,
-            font=("Segoe UI", 12),
-            text_color=theme.fg,
-        ).pack(anchor="w", padx=PAD, pady=(4, 8))
-        ctk.CTkSwitch(
-            card,
-            text="Show volume and play/pause HUD",
-            variable=self._actions_var,
-            progress_color=theme.accent,
-            button_color=theme.fg,
-            font=("Segoe UI", 12),
-            text_color=theme.fg,
-        ).pack(anchor="w", padx=PAD, pady=(0, 8))
+        self._autostart_var = ctk.BooleanVar(value=getattr(config, "autostart", True))
+
+        self._switch(card, "Start LoFi HUD with Windows", self._autostart_var, pady=(4, 8))
+        self._switch(card, "Auto-show Now Playing when the track changes", self._now_playing_var)
+        self._switch(card, "Show volume and play/pause HUD", self._actions_var)
 
         opts = ["Disabled"] + devices
         if config.autopause_device not in opts:
@@ -301,6 +404,7 @@ class SettingsWindow(ctk.CTkToplevel):
         source = self._card(parent, "Music source")
         dir_frame = ctk.CTkFrame(source, fg_color="transparent")
         dir_frame.pack(fill="x", padx=PAD, pady=(4, PAD))
+        theme = self._theme
         self._dir_entry = ctk.CTkEntry(
             dir_frame,
             fg_color=theme.surface,
@@ -309,7 +413,9 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self._dir_entry.insert(0, config.music_dir)
         self._dir_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        ctk.CTkButton(
+        self._entries.append(self._dir_entry)
+
+        browse_btn = ctk.CTkButton(
             dir_frame,
             text="Browse",
             width=88,
@@ -317,23 +423,16 @@ class SettingsWindow(ctk.CTkToplevel):
             hover_color=theme.accent_hover,
             text_color=theme.accent_on_accent,
             command=self._browse,
-        ).pack(side="right")
+        )
+        browse_btn.pack(side="right")
+        self._buttons.append(browse_btn)
 
     def _build_controls(self, parent: tk.Misc) -> None:
         config = self._config
-        theme = self._theme
         card = self._card(parent, "Keybinds")
 
         self._hardware_var = ctk.BooleanVar(value=config.enable_hardware_keys)
-        ctk.CTkSwitch(
-            card,
-            text="Enable hardware media keys",
-            variable=self._hardware_var,
-            progress_color=theme.accent,
-            button_color=theme.fg,
-            font=("Segoe UI", 12),
-            text_color=theme.fg,
-        ).pack(anchor="w", padx=PAD, pady=(4, 8))
+        self._switch(card, "Enable hardware media keys", self._hardware_var, pady=(4, 8))
 
         row = self._row(card, "Hold Modifier")
         self._mod_var = ctk.StringVar(value=config.mod_key.upper())
@@ -356,6 +455,7 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         button.grid(row=0, column=1, sticky="e")
         button.configure(command=lambda k=config_key, b=button: self._start_capture(k, b))
+        self._buttons.append(button)
 
     def _start_capture(self, config_key: str, button: ctk.CTkButton) -> None:
         if self._capturing:
@@ -419,12 +519,31 @@ class SettingsWindow(ctk.CTkToplevel):
             key_ignore=self._binds["key_ignore"],
             key_vol_up=self._binds["key_vol_up"],
             key_vol_down=self._binds["key_vol_down"],
+            autostart=self._autostart_var.get(),
         )
+        self._config = updated
         self._on_save(updated)
-        self._destroy()
+        new_theme = get_theme(updated.theme)
+        self.apply_theme(new_theme)
+
+        # Immediate visual confirmation on the save button
+        self._save_btn.configure(text="✓ Saved!", fg_color="#2ecc71", hover_color="#27ae60")
+        self.after(
+            1500,
+            lambda: self._save_btn.configure(
+                text="Save & Apply",
+                fg_color=self._theme.accent,
+                hover_color=self._theme.accent_hover,
+                text_color=self._theme.accent_on_accent,
+            ),
+        )
 
     def _destroy(self) -> None:
         self._capturing = False
         self._set_binding(False)
-        self._on_close()
+        try:
+            geo = self.geometry()
+        except Exception:
+            geo = None
+        self._on_close(geo)
         self.destroy()

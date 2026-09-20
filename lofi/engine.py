@@ -57,7 +57,14 @@ class Player:
 
         plugin_path = os.path.join(vlc_dir, "plugins")
         try:
-            self._instance = vlc.Instance("--no-video", "--plugin-path={}".format(plugin_path))
+            self._instance = vlc.Instance(
+                "--no-video",
+                "--no-stats",
+                "--no-sub-autodetect-file",
+                "--no-osd",
+                "--quiet",
+                "--plugin-path={}".format(plugin_path),
+            )
             self._list_player = self._instance.media_list_player_new()
             self._media_player = self._list_player.get_media_player()
             self._media_player.audio_set_volume(max(0, min(100, volume)))

@@ -31,6 +31,7 @@ class AppConfig:
     autopause_device: str
     enable_hardware_keys: bool
     theme: str
+    autostart: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -59,6 +60,7 @@ def default_config() -> AppConfig:
         autopause_device="Disabled",
         enable_hardware_keys=True,
         theme=DEFAULT_THEME_ID,
+        autostart=True,
     )
 
 
