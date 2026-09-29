@@ -15,6 +15,7 @@ from lofi.devices import get_active_audio_devices
 from lofi.engine import Player
 from lofi.hud import Hud
 from lofi.input import HotkeyController
+from lofi.instance import SingleInstance
 from lofi.paths import icon_path
 from lofi.settings import SettingsController
 from lofi.themes import get_theme
@@ -98,7 +99,8 @@ def ensure_music_dir(path: str) -> None:
 class App:
     """Owns shared state and marshals all engine/UI work onto the Tk thread."""
 
-    def __init__(self) -> None:
+    def __init__(self, single_instance: Optional[SingleInstance] = None) -> None:
+        self._single_instance = single_instance
         self.config = load_config()
         ensure_music_dir(self.config.music_dir)
         install_start_menu_shortcut()
@@ -142,6 +144,10 @@ class App:
         self.hotkeys.start()
         self.tray.start()
         self._update_tray_title()
+        if self._single_instance:
+            self._single_instance.listen_for_activation(
+                lambda: self.root.after_idle(self._on_activated_by_second_instance)
+            )
         self.root.after(1000, self._track_monitor)
         self.root.after(2000, self._device_monitor)
         if not self.player.available:
@@ -149,6 +155,10 @@ class App:
                 400,
                 lambda: self.hud.show("VLC not found — install 64-bit VLC", self.config, 5000),
             )
+
+    def _on_activated_by_second_instance(self) -> None:
+        self.settings.open()
+        self.hud.show("LoFi HUD is already running", self.config, 3000)
 
     def dispatch(self, action: str, *args: object) -> None:
         self.root.after(0, self._run_action, action, *args)
@@ -323,6 +333,8 @@ class App:
         self.root.after(interval, self._device_monitor)
 
     def _on_exit(self, *_args: object) -> None:
+        if self._single_instance:
+            self._single_instance.release()
         self.hotkeys.stop()
         self.player.stop()
         self.tray.stop()

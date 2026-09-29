@@ -11,6 +11,9 @@ build/
 dist/
 *.spec
 
+# Ignore compiled Python files
+*.pyc
+
 # Project specific local data
 config.json
 Lofi/

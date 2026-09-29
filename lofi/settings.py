@@ -69,7 +69,9 @@ class SettingsController:
 
     def open(self) -> None:
         if self._window is not None and self._window.winfo_exists():
-            self._window.focus()
+            self._window.deiconify()
+            self._window.lift()
+            self._window.focus_force()
             return
         self._window = SettingsWindow(
             self._root,
