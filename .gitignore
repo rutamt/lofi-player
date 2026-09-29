@@ -16,10 +16,11 @@ dist/
 
 # Project specific local data
 config.json
-Lofi/
+# Allow the lofi directory, but keep ignoring cache files inside it
 !lofi/
 !lofi/**
-*.log
+lofi/**/__pycache__/
+
 
 # Music Files
 *.mp3
