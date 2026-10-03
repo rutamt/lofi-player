@@ -1,0 +1,24 @@
+Welcome to LoFi HUD!
+
+Here is a 30-second quick start guide to get you up and running:
+
+1. HOW TO PLAY MUSIC
+   - Drop your favorite .mp3, .flac, .wav, .m4a, or .ogg songs into your LoFi music folder.
+   - Right-click the system tray icon and select "Open Music Folder" anytime to add more tracks.
+   - LoFi HUD automatically loops and shuffles your library seamlessly.
+
+2. DEFAULT HOTKEYS (Hold Alt)
+   - Alt + Q: Play / Pause
+   - Alt + 1: Previous Track
+   - Alt + 2: Next Track
+   - Alt + 3: Show Current Track HUD
+   - Alt + 4: Ignore & Remove Current Track
+   - Alt + Up / Down: Volume Up / Down
+   * Physical hardware media keys on your keyboard and Bluetooth headphones work automatically!
+
+3. SETTINGS & CUSTOMIZATION
+   - Double-click the tray icon to open the Settings window.
+   - Choose from 6 handcrafted themes: Harbor Night, Tokyo Night, Rosé Pine, Polar Dusk, Gruvbox Warm, and Catppuccin Latte.
+   - Optionally select a Bluetooth audio device to auto-pause when your headphones disconnect.
+
+Enjoy your focus sessions!

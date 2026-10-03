@@ -22,6 +22,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+InfoBeforeFile=onboarding.txt
 
 ; Close any running instance of LoFi HUD before installing / upgrading
 CloseApplications=yes

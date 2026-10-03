@@ -1,48 +1,70 @@
 # LoFi HUD
 
-A minimalist, zero-ad background audio daemon for Windows. It operates silently in the system tray, responds to global hotkeys (and native Bluetooth media keys), and summons a hardware-accelerated, multi-monitor-aware HUD overlay to display the current track and volume over any active window.
+A minimalist, zero-ad background audio daemon for Windows. It operates silently in the system tray, responds to global hotkeys (and native Bluetooth media keys), and summons a hardware-accelerated, primary-display-anchored HUD overlay to display track info and volume over any active window.
 
 ## Features
-* **Ad-Free Local Playback:** Plays local audio files seamlessly on loop via the headless VLC engine.
+* **Ad-Free Local Playback:** Plays local audio files (.mp3, .wav, .flac, .ogg, .m4a, .aac, .opus, .wma) seamlessly on shuffle & loop via the headless VLC engine.
 * **Global & Media Keybinds:** Control playback from any application using custom modifier hotkeys or physical headset/keyboard media buttons.
-* **Non-Intrusive HUD:** A fully responsive, DPI-aware Tkinter overlay that sizes dynamically to the song title and auto-hides.
-* **Modern Settings UI:** Tabbed CustomTkinter interface with six named palettes, editable hotkey interceptors, and customizable HUD positioning.
-* **Smart String Cleaning:** Automatically strips out dashes, underscores, and file extensions from downloaded MP3s for a clean display.
-* **Auto-Start Integration:** Silently injects itself into the Windows boot registry.
-* **Auto-Pause:** Configure player to automatically pause playback when a chosen bluetooth device is disconnected.
+* **Modern Vector HUD:** Crisp, pixel-perfect vector icons rendered via Pillow with smooth fade transitions, progress bars, and high-DPI scaling.
+* **Dynamic System Tray:** Real-time hover tooltips (`LoFi HUD — ▶ Track Name`), 1-click library rescan, and instant music folder access.
+* **Settings UI with Live Theme Preview:** Tabbed interface with 6 handcrafted themes (*Harbor Night, Tokyo Night, Rosé Pine, Polar Dusk, Gruvbox Warm, and Catppuccin Latte*), persistent window geometry, and hotkey configuration.
+* **Smart Track Title Cleaning:** Automatically strips downloader prefixes, track numbering, bitrates, and video tags for a clean display.
+* **Zero-Delay Startup & Search Indexing:** Instant launch on Windows login via Startup shortcut and full Windows Search indexing.
+* **Single-Instance Protection:** Win32 named mutex prevents duplicate background processes, automatically focusing Settings if launched again.
+* **Bluetooth Auto-Pause:** Automatically pauses playback when a chosen Bluetooth device disconnects.
 
 ## Installation & Usage
-1. Download the latest `lofi_hud.exe` from the Releases page.
-2. Place the executable in a dedicated folder (e.g., `C:\Tools\LoFiHUD`).
-3. Run the application. It will automatically generate a `Lofi` folder and a `config.json` file in the same directory.
-4. Drop your `.mp3`, `.wav`, or `.flac` files into the newly created `Lofi` folder. One good source is [OpenLofi](https://github.com/btahir/open-lofi)
-5. Double-click the custom icon in the system tray to open Settings, configure your keybinds, and apply themes.
+
+### Option 1: One-Click Installer (Recommended)
+1. Download **`LoFiHUD_Setup_v1.0.0.exe`** from the [Releases](https://github.com/rutamt/lofi-player/releases) page.
+2. Run the setup wizard (no Administrator / UAC rights required).
+3. The app starts immediately in your system tray and creates Start Menu and autostart shortcuts.
+4. Right-click the tray icon and select **Open Music Folder** to drop in your favorite songs.
+
+### Option 2: Portable / Source
+1. Clone the repository and install requirements: `pip install -r requirements.txt`.
+2. Run `python lofi_hud.py`.
 
 ## Default Keybinds
 * **Play/Pause:** `Alt + Q` (or hardware media play/pause)
 * **Next Track:** `Alt + 2` (or hardware media next)
 * **Previous Track:** `Alt + 1` (or hardware media prev)
 * **Show Current Song:** `Alt + 3`
-* **Permanently Remove Current Song:** `Alt + 4`
+* **Ignore / Remove Current Song:** `Alt + 4` (moves file to `Ignored_Lofi`)
 * **Volume Up/Down:** `Alt + Up Arrow` / `Alt + Down Arrow`
 
-## Themes
-Harbor Night, Tokyo Night, Rosé Pine, Polar Dusk, Gruvbox Warm, and Catppuccin Latte. Existing `config.json` files that still name the older palettes (Canopy, Hanami, Paper, Circuit, and others) are mapped automatically.
+## Uninstallation
+LoFi HUD is designed to uninstall completely cleanly without leaving orphan files or deleting your music:
 
-## Building from Source
+* **Via Windows Settings:**
+  1. Open Windows **Settings** → **Apps** → **Installed apps**.
+  2. Find **LoFi HUD**, click `...`, and select **Uninstall**.
+* **Via Command Line:**
+  ```powershell
+  lofi_hud.exe --uninstall
+  # or from source:
+  python lofi_hud.py --uninstall
+  ```
 
-**Prerequisites:**
-* Python 3.8+
-* 64-bit VLC Media Player installed on the host system.
-* An icon file named `icon.ico` placed in the root directory. (An example is included from  GuillenDesign (Paulo Guillen) on [icons.com](https://icon-icons.com/icon/music/21178))
+> [!NOTE]
+> The uninstaller removes all application files, Start Menu shortcuts, autostart entries, and AppData settings, but **strictly preserves your songs and music folder**.
 
-**1. Install Dependencies:**
+## Building from Source & Compiling the Installer
+
+### 1. Build the Application Directory
 ```bash
-pip install python-vlc pynput pystray pillow customtkinter
+pip install -r requirements.txt pyinstaller
+pyinstaller lofi_hud.spec
 ```
+The compiled application will be generated in `dist/lofi_hud/`.
 
-**2. Compile Executable:**
-Run the following PyInstaller command to bundle the script, the `lofi` package, and the icon into a single, headless executable:
-```bash
-pyinstaller --onefile --noconsole --hidden-import "pynput.keyboard._win32" --hidden-import "lofi.app" --collect-submodules lofi --icon="icon.ico" --add-data "icon.ico;." lofi_hud.py
-```
+### 2. (Optional) Bundle Portable VLC
+To make the app completely independent of system VLC installs:
+1. Download the official 64-bit portable VLC `.zip` from [VideoLAN](https://download.videolan.org/pub/videolan/vlc/).
+2. Copy `libvlc.dll`, `libvlccore.dll`, and the `plugins/` directory into `dist/lofi_hud/`.
+
+### 3. Compile the Inno Setup Installer
+1. Install [Inno Setup 6](https://jrsoftware.org/isdl.php) (`winget install JRSoftware.InnoSetup`).
+2. Right-click `installer.iss` and click **Compile** (or run `iscc installer.iss` in PowerShell).
+3. The finished **`LoFiHUD_Setup_v1.0.0.exe`** installer will be output into the `dist/` directory!
+
