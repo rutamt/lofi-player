@@ -7,15 +7,13 @@ LoFi HUD operates silently in the system tray, responds to global hotkeys (and n
 ---
 
 ## ✨ Features
-* **Zero-Ad Local Playback:** Plays local audio files seamlessly on shuffle and loop with ultra-low CPU and RAM usage.
-* **Modern Vector HUD:** Crisp, pixel-perfect vector icons with smooth fade transitions, progress bars, and high-DPI scaling.
-* **Global & Media Keybinds:** Control playback from any application using custom modifier hotkeys or physical headset/keyboard media buttons.
+* **Zero-Ad Local Playback:** Plays local audio files seamlessly on shuffle and loop with low CPU and RAM usage.
+* **Modern Vector HUD:** Crisp vector icons with smooth fade transitions, progress bars, and high-DPI scaling.
+* **Global & Media Keybinds:** Control playback using custom keybinds that can be accessed anywhere.
 * **Dynamic System Tray:** Real-time hover tooltips (`LoFi HUD — ▶ Track Name`), 1-click library rescan, and instant music folder access.
-* **6 Handcrafted Themes:** *Harbor Night, Tokyo Night, Rosé Pine, Polar Dusk, Gruvbox Warm,* and *Catppuccin Latte* with instant live preview.
 * **Smart Track Title Cleaning:** Automatically strips downloader prefixes, track numbering, bitrates, and video tags for a clean display.
-* **Instant Startup & Windows Search:** Zero-delay startup via the Windows Startup folder and full Windows Search indexing.
-* **Single-Instance Protection:** Win32 named mutex ensures only one background instance runs, automatically focusing Settings if launched again.
-* **Bluetooth Auto-Pause:** Automatically pauses playback when your Bluetooth headphones or speaker disconnect.
+* **Auto Startup & Windows Search:** Automatically starts up after Windows restarts.
+* **Bluetooth Auto-Pause:** Automatically pauses playback when your selected Bluetooth device disconnects.
 
 ---
 
@@ -47,7 +45,7 @@ LoFi HUD is designed to uninstall completely cleanly:
 * **Via Command Line:** Run `lofi_hud.exe --uninstall` (or `python lofi_hud.py --uninstall`).
 
 > [!NOTE]
-> The uninstaller removes all application files, Start Menu shortcuts, autostart entries, and AppData settings, but **strictly preserves your songs and music folder**.
+> The uninstaller removes all application files, Start Menu shortcuts, autostart entries, and AppData settings. By default, **your music folder and songs are safely preserved**, but you can optionally choose to delete the music folder as well when prompted.
 
 ---
 
@@ -61,7 +59,7 @@ LoFi HUD is designed to uninstall completely cleanly:
    - LoFi HUD automatically loops, shuffles, and cleans up track titles. If the library was empty, adding files and pressing Play will automatically rescan without needing a restart!
 
 ### 🎧 Need Free LoFi Music?
-Check out **[OpenLofi](https://github.com/btahir/open-lofi)** by Bashar Tahir—a fantastic collection of high-quality, copyright-free, royalty-free LoFi tracks that you can download and drop straight into your LoFi music folder.
+Check out **[OpenLofi](https://github.com/btahir/open-lofi)** by Bashar Tahir. It's a fantastic collection of high-quality, copyright-free, royalty-free LoFi tracks that you can download and drop into your LoFi music folder. Just make sure to only put the audio files, no JSONs.
 
 ---
 

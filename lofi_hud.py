@@ -23,7 +23,12 @@ def enable_dpi_awareness() -> None:
 
 def main() -> None:
     if "--uninstall" in sys.argv or "/uninstall" in sys.argv:
-        clean_uninstall(show_dialog=True)
+        delete_music = None
+        if "--delete-music" in sys.argv:
+            delete_music = True
+        elif "--keep-music" in sys.argv or "--preserve-music" in sys.argv:
+            delete_music = False
+        clean_uninstall(show_dialog=True, delete_music=delete_music)
         return
 
     enable_dpi_awareness()

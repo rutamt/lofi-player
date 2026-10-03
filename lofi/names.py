@@ -38,9 +38,8 @@ def clean_title_from_filename(filename: str) -> str:
     for pattern in noise_patterns:
         display_name = re.sub(pattern, "", display_name, flags=re.IGNORECASE)
 
-    # Clean up underscores and hyphens
-    display_name = re.sub(r"_+", " ", display_name)
-    display_name = re.sub(r"\s*-\s*", " - ", display_name)
+    # Clean up all underscores and hyphens into clean spaces
+    display_name = re.sub(r"[-_]+", " ", display_name)
     display_name = re.sub(r"\s+", " ", display_name).strip()
     return display_name.title() if display_name else "Unknown Track"
 

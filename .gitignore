@@ -25,3 +25,6 @@ lofi/**/__pycache__/
 # Music Files
 *.mp3
 *.wav
+
+# Private developer documentation
+DEV_RELEASE_GUIDE.md

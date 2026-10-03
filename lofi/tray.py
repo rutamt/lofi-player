@@ -49,7 +49,7 @@ class Tray:
             item("Open Music Folder", lambda _i, _j: on_open_folder()),
             item("Exit", lambda _i, _j: on_exit()),
         )
-        self._icon = pystray.Icon("LoFi HUD", load_icon(), "LoFi HUD — Idle", menu)
+        self._icon = pystray.Icon("LoFi HUD", load_icon(), "LoFi HUD Idle", menu)
 
     def set_title(self, title: str) -> None:
         if self._icon is not None:

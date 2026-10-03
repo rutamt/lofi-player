@@ -209,13 +209,47 @@ class SettingsWindow(ctk.CTkToplevel):
         from lofi import __version__
 
         self._save_btn.pack(fill="x")
+
+        footer_info = ctk.CTkFrame(footer, fg_color="transparent")
+        footer_info.pack(pady=(8, 0))
+
         self._footer_lbl = ctk.CTkLabel(
-            footer,
+            footer_info,
             text=f"LoFi HUD v{__version__} • Created by Rutam and Gemini",
             font=("Segoe UI", 11),
             text_color=theme.muted,
         )
-        self._footer_lbl.pack(pady=(8, 0))
+        self._footer_lbl.pack(side="left")
+
+        sep = ctk.CTkLabel(
+            footer_info,
+            text="  •  ",
+            font=("Segoe UI", 11),
+            text_color=theme.muted,
+        )
+        sep.pack(side="left")
+        self._labels.append(sep)
+
+        self._uninstall_btn = ctk.CTkButton(
+            footer_info,
+            text="Uninstall",
+            font=("Segoe UI", 11, "underline"),
+            text_color=theme.muted,
+            fg_color="transparent",
+            hover_color=theme.surface_alt,
+            corner_radius=4,
+            width=0,
+            height=20,
+            cursor="hand2",
+            command=self._uninstall_action,
+        )
+        self._uninstall_btn.pack(side="left")
+        self._uninstall_btn.bind(
+            "<Enter>", lambda e: self._uninstall_btn.configure(text_color="#ef4444")
+        )
+        self._uninstall_btn.bind(
+            "<Leave>", lambda e: self._uninstall_btn.configure(text_color=self._theme.muted)
+        )
 
     def apply_theme(self, theme: Theme) -> None:
         """Dynamically re-color all widgets in-place without closing or flickering."""
@@ -284,6 +318,11 @@ class SettingsWindow(ctk.CTkToplevel):
             text_color=theme.accent_on_accent,
         )
         self._footer_lbl.configure(text_color=theme.muted)
+        if hasattr(self, "_uninstall_btn"):
+            self._uninstall_btn.configure(
+                text_color=theme.muted,
+                hover_color=theme.surface_alt,
+            )
 
     def _try_icon(self, path: str) -> None:
         try:
@@ -471,6 +510,7 @@ class SettingsWindow(ctk.CTkToplevel):
             )
             rescan_btn.pack(side="left")
             self._secondary_buttons.append(rescan_btn)
+        ctk.CTkFrame(source, height=12, fg_color="transparent").pack()
 
     def _open_folder_action(self) -> None:
         path = self._dir_entry.get().strip()
@@ -482,6 +522,30 @@ class SettingsWindow(ctk.CTkToplevel):
             os.startfile(path)
         except Exception:
             pass
+
+    def _uninstall_action(self) -> None:
+        from lofi.paths import application_dir
+        from lofi.uninstall import clean_uninstall
+        import subprocess
+
+        unins_exe = os.path.join(application_dir(), "unins000.exe")
+        if os.path.exists(unins_exe):
+            self._destroy()
+            try:
+                subprocess.Popen([unins_exe, "/SILENT"])
+            except Exception:
+                pass
+            return
+
+        import tkinter.messagebox as mb
+        choice = mb.askyesno(
+            "Uninstall LoFi HUD",
+            "Are you sure you want to remove LoFi HUD, its shortcuts, and all application configurations from your system?\n\n(Your music folder and songs will be preserved).",
+            parent=self,
+        )
+        if choice:
+            self._destroy()
+            clean_uninstall(show_dialog=True, delete_music=False)
 
     def _build_controls(self, parent: tk.Misc) -> None:
         config = self._config

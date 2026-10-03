@@ -270,11 +270,11 @@ class App:
     def _update_tray_title(self) -> None:
         song_name = self.player.clean_name()
         if self.player.is_playing:
-            title = f"LoFi HUD — ▶ {song_name}" if song_name else "LoFi HUD — Playing"
+            title = f"LoFi HUD ▶ {song_name}" if song_name else "LoFi HUD ▶ Playing"
         elif song_name:
-            title = f"LoFi HUD — ⏸ {song_name}"
+            title = f"LoFi HUD ⏸ {song_name}"
         else:
-            title = "LoFi HUD — Idle"
+            title = "LoFi HUD Idle"
         self.tray.set_title(title)
 
     def show_current_song(self) -> None:
