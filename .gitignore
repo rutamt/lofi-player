@@ -11,10 +11,16 @@ build/
 dist/
 *.spec
 
+# Ignore compiled Python files
+*.pyc
+
 # Project specific local data
 config.json
-Lofi/
-*.log
+# Allow the lofi directory, but keep ignoring cache files inside it
+!lofi/
+!lofi/**
+lofi/**/__pycache__/
+
 
 # Music Files
 *.mp3

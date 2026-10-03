@@ -1,44 +1,103 @@
 # LoFi HUD
 
-A minimalist, zero-ad background audio daemon for Windows. It operates silently in the system tray, responds to global hotkeys (and native Bluetooth media keys), and summons a hardware-accelerated, multi-monitor-aware HUD overlay to display the current track and volume over any active window.
+A minimalist, zero-ad background audio daemon for Windows. 
 
-## Features
-* **Ad-Free Local Playback:** Plays local audio files seamlessly on loop via the headless VLC engine.
+LoFi HUD operates silently in the system tray, responds to global hotkeys (and native Bluetooth media keys), and summons a hardware-accelerated, primary-display-anchored HUD overlay to display track info and volume over any active window without taking focus.
+
+---
+
+## ✨ Features
+* **Zero-Ad Local Playback:** Plays local audio files seamlessly on shuffle and loop with ultra-low CPU and RAM usage.
+* **Modern Vector HUD:** Crisp, pixel-perfect vector icons with smooth fade transitions, progress bars, and high-DPI scaling.
 * **Global & Media Keybinds:** Control playback from any application using custom modifier hotkeys or physical headset/keyboard media buttons.
-* **Non-Intrusive HUD:** A fully responsive, DPI-aware Tkinter overlay that sizes dynamically to the song title and auto-hides.
-* **Modern Settings UI:** CustomTkinter interface with 5 unified themes, editable hotkey interceptors, and customizable HUD positioning.
-* **Smart String Cleaning:** Automatically strips out dashes, underscores, and file extensions from downloaded MP3s for a clean display.
-* **Auto-Start Integration:** Silently injects itself into the Windows boot registry.
-* **Auto-Pause:** Configure player to automatically pause playback when a chosen bluetooth device is disconnected.
+* **Dynamic System Tray:** Real-time hover tooltips (`LoFi HUD — ▶ Track Name`), 1-click library rescan, and instant music folder access.
+* **6 Handcrafted Themes:** *Harbor Night, Tokyo Night, Rosé Pine, Polar Dusk, Gruvbox Warm,* and *Catppuccin Latte* with instant live preview.
+* **Smart Track Title Cleaning:** Automatically strips downloader prefixes, track numbering, bitrates, and video tags for a clean display.
+* **Instant Startup & Windows Search:** Zero-delay startup via the Windows Startup folder and full Windows Search indexing.
+* **Single-Instance Protection:** Win32 named mutex ensures only one background instance runs, automatically focusing Settings if launched again.
+* **Bluetooth Auto-Pause:** Automatically pauses playback when your Bluetooth headphones or speaker disconnect.
 
-## Installation & Usage
-1. Download the latest `lofi_hud.exe` from the Releases page.
-2. Place the executable in a dedicated folder (e.g., `C:\Tools\LoFiHUD`).
-3. Run the application. It will automatically generate a `Lofi` folder and a `config.json` file in the same directory.
-4. Drop your `.mp3`, `.wav`, or `.flac` files into the newly created `Lofi` folder. One good source is [OpenLofi](https://github.com/btahir/open-lofi)
-5. Double-click the custom icon in your system tray to open Settings, configure your keybinds, and apply themes.
+---
 
-## Default Keybinds
-* **Play/Pause:** `Alt + Q` (or hardware media play/pause)
-* **Next Track:** `Alt + 2` (or hardware media next)
-* **Previous Track:** `Alt + 1` (or hardware media prev)
-* **Show Current Song:** `Alt + 3`
-* **Permanently Remove Current Song:** `Alt + 4`
-* **Volume Up/Down:** `Alt + Up Arrow` / `Alt + Down Arrow`
+## 🚀 How to Install
 
-## Building from Source
+### Option 1: One-Click Installer (Recommended)
+1. Download **`LoFiHUD_Setup_v1.0.0.exe`** from the [Releases](https://github.com/rutamt/lofi-player/releases) page.
+2. Run the installer wizard. No Administrator / UAC rights are required, and neither Python nor VLC needs to be pre-installed—everything is fully self-contained!
+3. The app will launch directly into your system tray and will automatically appear in Windows Search.
 
-**Prerequisites:**
-* Python 3.8+
-* 64-bit VLC Media Player installed on the host system.
-* An icon file named `icon.ico` placed in the root directory. (An example is included from  GuillenDesign (Paulo Guillen) on [icons.com](https://icon-icons.com/icon/music/21178))
+### Option 2: Running from Source
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/rutamt/lofi-player.git
+   cd lofi-player
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Run the application:
+   ```bash
+   python lofi_hud.py
+   ```
 
-**1. Install Dependencies:**
-```bash
-pip install python-vlc pynput pystray pillow customtkinter
-```
+### 🗑 Uninstallation
+LoFi HUD is designed to uninstall completely cleanly:
+* **Via Windows Settings:** Go to **Settings** → **Apps** → **Installed apps**, search for **LoFi HUD**, and click **Uninstall**.
+* **Via Command Line:** Run `lofi_hud.exe --uninstall` (or `python lofi_hud.py --uninstall`).
 
-**2. Compile Executable:**
-Run the following PyInstaller command to bundle the script and the icon into a single, headless executable:
-```bash
-pyinstaller --onefile --noconsole --hidden-import "pynput.keyboard._win32" --icon="icon.ico" --add-data "icon.ico;." lofi_hud.py
+> [!NOTE]
+> The uninstaller removes all application files, Start Menu shortcuts, autostart entries, and AppData settings, but **strictly preserves your songs and music folder**.
+
+---
+
+## 🎵 How to Add Music
+
+1. **Open Your Music Folder:**
+   - Right-click the LoFi HUD system tray icon and select **Open Music Folder**.
+   - *(Or open Settings by double-clicking the tray icon and click the **Open Folder** button).*
+2. **Drop Your Audio Files In:**
+   - Supported formats: `.mp3`, `.flac`, `.wav`, `.m4a`, `.ogg`, `.aac`, `.opus`, and `.wma`.
+   - LoFi HUD automatically loops, shuffles, and cleans up track titles. If the library was empty, adding files and pressing Play will automatically rescan without needing a restart!
+
+### 🎧 Need Free LoFi Music?
+Check out **[OpenLofi](https://github.com/btahir/open-lofi)** by Bashar Tahir—a fantastic collection of high-quality, copyright-free, royalty-free LoFi tracks that you can download and drop straight into your LoFi music folder.
+
+---
+
+## ⌨ Default Keybinds
+
+| Action | Shortcut |
+|---|---|
+| **Play / Pause** | `Alt + Q` (or hardware media play/pause) |
+| **Next Track** | `Alt + 2` (or hardware media next) |
+| **Previous Track** | `Alt + 1` (or hardware media previous) |
+| **Show Current Song HUD** | `Alt + 3` |
+| **Ignore / Remove Current Song** | `Alt + 4` (safely moves file to `Ignored_Lofi`) |
+| **Volume Up / Down** | `Alt + Up Arrow` / `Alt + Down Arrow` |
+
+*Note: All keybinds and the modifier key (`Alt`, `Ctrl`, or `Shift`) can be fully customized in the Settings window.*
+
+---
+
+## 🎨 Themes
+LoFi HUD includes 6 carefully curated, eye-pleasing themes designed for long focus sessions:
+* **Harbor Night** (Deep oceanic navy with vibrant cyan)
+* **Tokyo Night** (Neon indigo with soft sky blue)
+* **Rosé Pine** (Muted rose gold with warm pine undertones)
+* **Polar Dusk** (Nordic frosted ice with polar blue)
+* **Gruvbox Warm** (Cozy retro groove with amber accent)
+* **Catppuccin Latte** (Crisp light mode with soothing lavender)
+
+---
+
+## 👏 Credits & Acknowledgments
+* **Created by:** Rutam and Gemini
+* **Music Library Recommendation:** [OpenLofi](https://github.com/btahir/open-lofi) by [Bashar Tahir](https://github.com/btahir)
+* **Icon Design:** Paulo Guillen (GuillenDesign) on [icon-icons.com](https://icon-icons.com/icon/music/21178)
+* **Core Libraries:**
+  * [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) by Tom Schimansky (UI framework)
+  * [libvlc](https://www.videolan.org/vlc/libvlc.html) by the VideoLAN Team (Audio engine)
+  * [pynput](https://github.com/moses-palmer/pynput) (Global input hooks)
+  * [pystray](https://github.com/moses-palmer/pystray) (System tray integration)
+  * [Pillow](https://python-pillow.org/) (Vector graphic rendering)
