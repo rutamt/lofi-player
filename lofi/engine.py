@@ -8,9 +8,18 @@ import shutil
 from typing import List, Optional
 
 from lofi.names import clean_title_from_mrl, mrl_to_local_path
-from lofi.paths import ignored_dir_for
+from lofi.paths import application_dir, ignored_dir_for
 
-VALID_EXTENSIONS = (".mp3", ".wav", ".flac", ".ogg", ".m4a")
+VALID_EXTENSIONS = (
+    ".mp3",
+    ".wav",
+    ".flac",
+    ".ogg",
+    ".m4a",
+    ".aac",
+    ".opus",
+    ".wma",
+)
 VLC_CANDIDATES = (
     r"C:\Program Files\VideoLAN\VLC",
     r"C:\Program Files (x86)\VideoLAN\VLC",
@@ -18,6 +27,19 @@ VLC_CANDIDATES = (
 
 
 def find_vlc_dir() -> Optional[str]:
+    # Check bundled/portable paths first
+    base = application_dir()
+    local_candidates = [
+        base,
+        os.path.join(base, "vlc"),
+        os.path.join(base, "_internal"),
+        os.path.join(base, "_internal", "vlc"),
+    ]
+    for path in local_candidates:
+        if os.path.exists(os.path.join(path, "libvlc.dll")):
+            return path
+
+    # Check system installation candidates
     for path in VLC_CANDIDATES:
         if os.path.exists(path):
             return path
@@ -137,7 +159,9 @@ class Player:
         return True
 
     def toggle(self) -> str:
-        """Return ``play``, ``pause``, or ``empty``."""
+        """Return ``play``, ``pause``, ``empty``, or ``unavailable``."""
+        if not self.available:
+            return "unavailable"
         if not self.song_paths:
             return "empty"
         if self.is_playing:

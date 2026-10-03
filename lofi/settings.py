@@ -58,12 +58,14 @@ class SettingsController:
         save_config: Callable[[AppConfig], None],
         get_devices: Callable[[], List[str]],
         set_binding: Callable[[bool], None],
+        on_rescan: Optional[Callable[[], None]] = None,
     ) -> None:
         self._root = root
         self._get_config = get_config
         self._save_config = save_config
         self._get_devices = get_devices
         self._set_binding = set_binding
+        self._on_rescan = on_rescan
         self._window: Optional[ctk.CTkToplevel] = None
         self._last_geometry: Optional[str] = None
 
@@ -81,6 +83,7 @@ class SettingsController:
             self._set_binding,
             on_close=self._on_close,
             initial_geometry=self._last_geometry,
+            on_rescan=self._on_rescan,
         )
 
     def _on_close(self, geometry: Optional[str] = None) -> None:
@@ -99,12 +102,14 @@ class SettingsWindow(ctk.CTkToplevel):
         set_binding: Callable[[bool], None],
         on_close: Callable[[Optional[str]], None],
         initial_geometry: Optional[str] = None,
+        on_rescan: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(root)
         self._config = config
         self._on_save = on_save
         self._set_binding = set_binding
         self._on_close = on_close
+        self._on_rescan = on_rescan
         self._theme = get_theme(config.theme)
         self._capturing = False
         self._binds: Dict[str, str] = {
@@ -123,6 +128,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self._menus: List[ctk.CTkOptionMenu] = []
         self._switches: List[ctk.CTkSwitch] = []
         self._buttons: List[ctk.CTkButton] = []
+        self._secondary_buttons: List[ctk.CTkButton] = []
         self._entries: List[ctk.CTkEntry] = []
 
         self.title("LoFi HUD Settings")
@@ -200,10 +206,12 @@ class SettingsWindow(ctk.CTkToplevel):
             hover_color=theme.accent_hover,
             text_color=theme.accent_on_accent,
         )
+        from lofi import __version__
+
         self._save_btn.pack(fill="x")
         self._footer_lbl = ctk.CTkLabel(
             footer,
-            text="Created by Rutam and Gemini",
+            text=f"LoFi HUD v{__version__} • Created by Rutam and Gemini",
             font=("Segoe UI", 11),
             text_color=theme.muted,
         )
@@ -254,6 +262,13 @@ class SettingsWindow(ctk.CTkToplevel):
                 fg_color=theme.accent,
                 hover_color=theme.accent_hover,
                 text_color=theme.accent_on_accent,
+            )
+
+        for s_btn in self._secondary_buttons:
+            s_btn.configure(
+                fg_color=theme.surface,
+                border_color=theme.border,
+                text_color=theme.fg,
             )
 
         for entry in self._entries:
@@ -405,7 +420,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
         source = self._card(parent, "Music source")
         dir_frame = ctk.CTkFrame(source, fg_color="transparent")
-        dir_frame.pack(fill="x", padx=PAD, pady=(4, PAD))
+        dir_frame.pack(fill="x", padx=PAD, pady=(4, 8))
         theme = self._theme
         self._dir_entry = ctk.CTkEntry(
             dir_frame,
@@ -428,6 +443,45 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         browse_btn.pack(side="right")
         self._buttons.append(browse_btn)
+
+        action_frame = ctk.CTkFrame(source, fg_color="transparent")
+        action_frame.pack(fill="x", padx=PAD, pady=(0, PAD))
+
+        open_btn = ctk.CTkButton(
+            action_frame,
+            text="Open Folder",
+            width=110,
+            fg_color=theme.surface,
+            hover_color=theme.border,
+            text_color=theme.fg,
+            command=self._open_folder_action,
+        )
+        open_btn.pack(side="left", padx=(0, 8))
+        self._secondary_buttons.append(open_btn)
+
+        if self._on_rescan:
+            rescan_btn = ctk.CTkButton(
+                action_frame,
+                text="Rescan Library",
+                width=120,
+                fg_color=theme.surface,
+                hover_color=theme.border,
+                text_color=theme.fg,
+                command=self._on_rescan,
+            )
+            rescan_btn.pack(side="left")
+            self._secondary_buttons.append(rescan_btn)
+
+    def _open_folder_action(self) -> None:
+        path = self._dir_entry.get().strip()
+        if not path:
+            return
+        try:
+            if not os.path.exists(path):
+                os.makedirs(path, exist_ok=True)
+            os.startfile(path)
+        except Exception:
+            pass
 
     def _build_controls(self, parent: tk.Misc) -> None:
         config = self._config

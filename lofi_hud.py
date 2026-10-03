@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import ctypes
 
+import sys
+
 from lofi.app import App
 from lofi.instance import SingleInstance
+from lofi.uninstall import clean_uninstall
 
 
 def enable_dpi_awareness() -> None:
@@ -19,6 +22,10 @@ def enable_dpi_awareness() -> None:
 
 
 def main() -> None:
+    if "--uninstall" in sys.argv or "/uninstall" in sys.argv:
+        clean_uninstall(show_dialog=True)
+        return
+
     enable_dpi_awareness()
 
     single_instance = SingleInstance()

@@ -1,6 +1,5 @@
-"""LoFi HUD — background LoFi playback daemon for Windows."""
-
-__all__ = ["App"]
+__version__ = "1.0.0"
+__all__ = ["App", "__version__"]
 
 
 def __getattr__(name: str):

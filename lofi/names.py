@@ -18,8 +18,31 @@ def mrl_to_local_path(mrl: Optional[str]) -> Optional[str]:
 
 def clean_title_from_filename(filename: str) -> str:
     display_name = os.path.splitext(filename)[0]
-    display_name = re.sub(r"[-_]", " ", display_name)
-    return re.sub(r"\s+", " ", display_name).strip().title()
+
+    # Strip common downloader/ripper prefixes
+    display_name = re.sub(
+        r"^(y2mate\.com|ytmp3\.cc|snaptik)\s*[-_]?\s*",
+        "",
+        display_name,
+        flags=re.IGNORECASE,
+    )
+
+    # Strip leading track numbers like "01 - ", "01. ", "1. "
+    display_name = re.sub(r"^\d{1,3}\s*[\.\-_]\s*", "", display_name)
+
+    # Strip noisy tags in brackets / parentheses
+    noise_patterns = [
+        r"\((?:official\s*(?:video|audio|music\s*video)|visualizer|lyrics|audio|320\s*kbps|hq|hd|4k)\)",
+        r"\[(?:official\s*(?:video|audio|music\s*video)|visualizer|lyrics|audio|320\s*kbps|flac|hq|hd|4k|lofi\s*(?:beats|hip\s*hop|chill)?)\]",
+    ]
+    for pattern in noise_patterns:
+        display_name = re.sub(pattern, "", display_name, flags=re.IGNORECASE)
+
+    # Clean up underscores and hyphens
+    display_name = re.sub(r"_+", " ", display_name)
+    display_name = re.sub(r"\s*-\s*", " - ", display_name)
+    display_name = re.sub(r"\s+", " ", display_name).strip()
+    return display_name.title() if display_name else "Unknown Track"
 
 
 def clean_title_from_mrl(mrl: Optional[str]) -> Optional[str]:

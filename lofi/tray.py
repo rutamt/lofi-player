@@ -33,6 +33,7 @@ class Tray:
         on_settings: Callable[[], None],
         on_toggle: Callable[[], None],
         on_next: Callable[[], None],
+        on_rescan: Callable[[], None],
         on_open_folder: Callable[[], None],
         on_exit: Callable[[], None],
     ) -> None:
@@ -44,6 +45,7 @@ class Tray:
             item("Settings (Double-Click)", lambda _i, _j: on_settings(), default=True),
             item("Play/Pause", lambda _i, _j: on_toggle()),
             item("Next Track", lambda _i, _j: on_next()),
+            item("Rescan Library", lambda _i, _j: on_rescan()),
             item("Open Music Folder", lambda _i, _j: on_open_folder()),
             item("Exit", lambda _i, _j: on_exit()),
         )

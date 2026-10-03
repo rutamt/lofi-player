@@ -197,6 +197,12 @@ def _parse_message(
     if "Folder Empty" in message:
         return "music", "LIBRARY", "Folder Empty: Add MP3s", None
 
+    if "Library Rescanned" in message:
+        return "check", "LIBRARY", message, None
+
+    if "already running" in message.lower():
+        return "check", "ACTIVE", "Already Running in Background", None
+
     if "Settings Saved" in message:
         return "check", "SETTINGS", "Settings Saved!", None
 

@@ -132,11 +132,13 @@ class App:
             save_config=self.apply_config,
             get_devices=get_active_audio_devices,
             set_binding=self._set_binding,
+            on_rescan=self.rescan_library,
         )
         self.tray = Tray(
             on_settings=lambda: self.root.after_idle(self.settings.open),
             on_toggle=lambda: self.root.after_idle(self.toggle_audio),
             on_next=lambda: self.root.after_idle(self.next_track),
+            on_rescan=lambda: self.root.after_idle(self.rescan_library),
             on_open_folder=lambda: self.root.after_idle(self.open_music_folder),
             on_exit=self._on_exit,
         )
@@ -218,8 +220,18 @@ class App:
             self._update_tray_title()
 
     def toggle_audio(self) -> None:
+        if not self.player.available:
+            self.toast("VLC not found — install 64-bit VLC", actions=True)
+            return
+
+        # If currently empty, auto-rescan the directory before giving up
+        if not self.player.song_paths:
+            self.player.load_library(self.config.music_dir)
+
         result = self.player.toggle()
-        if result == "empty":
+        if result == "unavailable":
+            self.toast("VLC not found — install 64-bit VLC", actions=True)
+        elif result == "empty":
             self.toast("Folder Empty: Add MP3s", actions=True)
             self.open_music_folder()
         elif result == "pause":
@@ -228,6 +240,18 @@ class App:
         elif result == "play":
             self.toast("▶ Resumed", actions=True)
             self._update_tray_title()
+
+    def rescan_library(self) -> None:
+        if not self.player.available:
+            self.toast("VLC not found — install 64-bit VLC", actions=True)
+            return
+        self.player.load_library(self.config.music_dir)
+        count = len(self.player.song_paths)
+        if count == 0:
+            self.toast("Folder Empty: Add MP3s", actions=True)
+        else:
+            self.toast(f"Library Rescanned: {count} Tracks", actions=True)
+        self._update_tray_title()
 
     def next_track(self) -> None:
         self.player.next()
