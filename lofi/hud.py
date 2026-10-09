@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import ctypes
-from ctypes import wintypes
 import re
+import sys
 import tkinter as tk
 from typing import Dict, Optional, Tuple
 
@@ -15,37 +14,54 @@ from lofi.config import AppConfig
 from lofi.themes import Theme, get_theme
 
 # Win32 Constants
-GWL_EXSTYLE = -20
-WS_EX_NOACTIVATE = 0x08000000
-DWMWA_WINDOW_CORNER_PREFERENCE = 33
-DWMWCP_ROUND = 2
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
 
+    GWL_EXSTYLE = -20
+    WS_EX_NOACTIVATE = 0x08000000
+    DWMWA_WINDOW_CORNER_PREFERENCE = 33
+    DWMWCP_ROUND = 2
 
-class RECT(ctypes.Structure):
-    _fields_ = [
-        ("left", wintypes.LONG),
-        ("top", wintypes.LONG),
-        ("right", wintypes.LONG),
-        ("bottom", wintypes.LONG),
-    ]
+    class RECT(ctypes.Structure):
+        _fields_ = [
+            ("left", wintypes.LONG),
+            ("top", wintypes.LONG),
+            ("right", wintypes.LONG),
+            ("bottom", wintypes.LONG),
+        ]
 
 
 def _get_primary_monitor_work_area() -> Tuple[int, int, int, int]:
     """Return (left, top, width, height) of the primary display's work area."""
+    if sys.platform == "win32":
+        try:
+            user32 = ctypes.windll.user32
+            rc = RECT()
+            # SPI_GETWORKAREA = 0x0030 retrieves the work area of the primary display
+            if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rc), 0):
+                return rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top
+        except Exception:
+            pass
+
+        try:
+            user32 = ctypes.windll.user32
+            return 0, 0, user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+        except Exception:
+            pass
+
+    # macOS or fallback
     try:
-        user32 = ctypes.windll.user32
-        rc = RECT()
-        # SPI_GETWORKAREA = 0x0030 retrieves the work area of the primary display
-        if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rc), 0):
-            return rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top
+        root = tk._default_root
+        if root:
+            sw = root.winfo_screenwidth()
+            sh = root.winfo_screenheight()
+            top_offset = 28 if sys.platform == "darwin" else 0
+            return 0, top_offset, sw, sh - top_offset
     except Exception:
         pass
 
-    try:
-        user32 = ctypes.windll.user32
-        return 0, 0, user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
-    except Exception:
-        return 0, 0, 1920, 1080
+    return 0, 0, 1920, 1080
 
 
 def _create_vector_icon(icon_type: str, color: str, size: int = 22) -> ctk.CTkImage:
@@ -301,6 +317,8 @@ class Hud:
 
     def _apply_win32_styles(self) -> None:
         """Configure non-activating style and Windows 11 rounded corners."""
+        if sys.platform != "win32":
+            return
         try:
             hwnd = ctypes.windll.user32.GetParent(self._window.winfo_id()) or self._window.winfo_id()
 

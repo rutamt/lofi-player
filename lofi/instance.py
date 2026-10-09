@@ -1,24 +1,24 @@
-"""Single instance mutex and activation signaling for Windows."""
-
-from __future__ import annotations
-
-import ctypes
+import os
+import socket
+import sys
 import threading
-from ctypes import wintypes
 from typing import Callable, Optional
 
-# Win32 Error Codes and Constants
-ERROR_ALREADY_EXISTS = 183
-EVENT_MODIFY_STATE = 0x0002
-WAIT_OBJECT_0 = 0x00000000
-INFINITE = 0xFFFFFFFF
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
+
+    ERROR_ALREADY_EXISTS = 183
+    EVENT_MODIFY_STATE = 0x0002
+    WAIT_OBJECT_0 = 0x00000000
+    INFINITE = 0xFFFFFFFF
 
 MUTEX_NAME = "Local\\LoFiHUD_SingleInstance_Mutex"
 EVENT_NAME = "Local\\LoFiHUD_ActivateEvent"
 
 
-class SingleInstance:
-    """Ensures only a single instance of LoFi HUD runs per user session."""
+class _Win32SingleInstance:
+    """Ensures only a single instance of LoFi HUD runs per Windows user session."""
 
     def __init__(
         self,
@@ -137,3 +137,93 @@ class SingleInstance:
             except Exception:
                 pass
             self._mutex_handle = None
+
+
+class _PosixSingleInstance:
+    """Ensures only a single instance runs on macOS / POSIX using a domain socket."""
+
+    def __init__(self, mutex_name: str = "lofi_hud", event_name: str = "lofi_hud") -> None:
+        from lofi.paths import user_data_dir
+
+        self._sock_path = os.path.join(user_data_dir(), "lofi_hud.sock")
+        self._server_sock: Optional[socket.socket] = None
+        self._listening = False
+        self._listen_thread: Optional[threading.Thread] = None
+
+    def acquire(self) -> bool:
+        """Attempt to bind the local domain socket."""
+        if os.path.exists(self._sock_path):
+            try:
+                test_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                test_sock.connect(self._sock_path)
+                test_sock.close()
+                return False  # Already running and responding
+            except OSError:
+                # Stale socket file from previous crash
+                try:
+                    os.remove(self._sock_path)
+                except OSError:
+                    pass
+
+        try:
+            self._server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self._server_sock.bind(self._sock_path)
+            self._server_sock.listen(5)
+            return True
+        except OSError:
+            return False
+
+    def notify_running_instance(self) -> None:
+        """Signal the existing instance to surface its interface."""
+        if os.path.exists(self._sock_path):
+            try:
+                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                s.connect(self._sock_path)
+                s.sendall(b"activate\n")
+                s.close()
+            except OSError:
+                pass
+
+    def listen_for_activation(self, callback: Callable[[], None]) -> None:
+        """Listen for incoming activation signals on the unix socket."""
+        if not self._server_sock:
+            return
+        self._listening = True
+
+        def _listener() -> None:
+            while self._listening:
+                try:
+                    self._server_sock.settimeout(1.0)
+                    conn, _ = self._server_sock.accept()
+                    data = conn.recv(64)
+                    conn.close()
+                    if b"activate" in data:
+                        try:
+                            callback()
+                        except Exception:
+                            pass
+                except socket.timeout:
+                    continue
+                except OSError:
+                    break
+
+        self._listen_thread = threading.Thread(target=_listener, daemon=True)
+        self._listen_thread.start()
+
+    def release(self) -> None:
+        """Close socket and remove socket file."""
+        self._listening = False
+        if self._server_sock:
+            try:
+                self._server_sock.close()
+            except OSError:
+                pass
+            self._server_sock = None
+        if os.path.exists(self._sock_path):
+            try:
+                os.remove(self._sock_path)
+            except OSError:
+                pass
+
+
+SingleInstance = _Win32SingleInstance if sys.platform == "win32" else _PosixSingleInstance

@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import winreg
 from typing import Optional
 
 import customtkinter as ctk
@@ -53,6 +52,8 @@ def _create_shortcut(target_exe: str, lnk_path: str, icon: Optional[str] = None)
 
 def install_start_menu_shortcut() -> None:
     """Register in Windows Start Menu so LoFi HUD is indexed by Windows Search."""
+    if sys.platform != "win32":
+        return
     try:
         start_menu = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs")
         lnk_path = os.path.join(start_menu, "LoFi HUD.lnk")
@@ -62,29 +63,63 @@ def install_start_menu_shortcut() -> None:
 
 
 def sync_autostart(enabled: bool) -> None:
-    """Configure autostart via the Windows Startup folder to eliminate the 2-minute delay."""
-    try:
-        startup_dir = os.path.join(
-            os.environ.get("APPDATA", ""),
-            r"Microsoft\Windows\Start Menu\Programs\Startup",
-        )
-        startup_lnk = os.path.join(startup_dir, "LoFi HUD.lnk")
-
-        # Clean up legacy Run registry key to prevent delayed duplicate execution
+    """Configure autostart on Windows (Startup folder) or macOS (LaunchAgent)."""
+    if sys.platform == "win32":
         try:
-            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
-                winreg.DeleteValue(key, "LoFiHUD")
-        except OSError:
-            pass
+            import winreg
 
-        if enabled:
-            _create_shortcut(_get_target_executable(), startup_lnk, icon_path())
-        else:
-            if os.path.exists(startup_lnk):
-                os.remove(startup_lnk)
-    except Exception:
-        pass
+            startup_dir = os.path.join(
+                os.environ.get("APPDATA", ""),
+                r"Microsoft\Windows\Start Menu\Programs\Startup",
+            )
+            startup_lnk = os.path.join(startup_dir, "LoFi HUD.lnk")
+
+            # Clean up legacy Run registry key to prevent delayed duplicate execution
+            try:
+                key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
+                    winreg.DeleteValue(key, "LoFiHUD")
+            except OSError:
+                pass
+
+            if enabled:
+                _create_shortcut(_get_target_executable(), startup_lnk, icon_path())
+            else:
+                if os.path.exists(startup_lnk):
+                    os.remove(startup_lnk)
+        except Exception:
+            pass
+    elif sys.platform == "darwin":
+        try:
+            agent_dir = os.path.expanduser("~/Library/LaunchAgents")
+            os.makedirs(agent_dir, exist_ok=True)
+            plist_path = os.path.join(agent_dir, "com.rutamt.lofihud.plist")
+            if enabled:
+                target = _get_target_executable()
+                plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.rutamt.lofihud</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{target}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>
+"""
+                with open(plist_path, "w", encoding="utf-8") as f:
+                    f.write(plist_content)
+            else:
+                if os.path.exists(plist_path):
+                    os.remove(plist_path)
+        except Exception:
+            pass
 
 
 def ensure_music_dir(path: str) -> None:

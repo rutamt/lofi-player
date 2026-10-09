@@ -10,6 +10,8 @@ env/
 build/
 dist/
 *.spec
+!lofi_hud.spec
+!lofi_hud_mac.spec
 
 # Ignore compiled Python files
 *.pyc

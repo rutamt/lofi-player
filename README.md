@@ -1,18 +1,18 @@
 # LoFi HUD
 
-A minimalist, zero-ad background audio daemon for Windows. 
+A minimalist, zero-ad background audio daemon for Windows and macOS. 
 
-LoFi HUD operates silently in the system tray, responds to global hotkeys (and native Bluetooth media keys), and summons a hardware-accelerated, primary-display-anchored HUD overlay to display track info and volume over any active window without taking focus.
+LoFi HUD operates silently in the system tray / menu bar, responds to global hotkeys (and native Bluetooth media keys), and summons a hardware-accelerated, primary-display-anchored HUD overlay to display track info and volume over any active window without taking focus.
 
 ---
 
 ## ✨ Features
 * **Zero-Ad Local Playback:** Plays local audio files seamlessly on shuffle and loop with low CPU and RAM usage.
 * **Modern Vector HUD:** Crisp vector icons with smooth fade transitions, progress bars, and high-DPI scaling.
-* **Global & Media Keybinds:** Control playback using custom keybinds that can be accessed anywhere.
+* **Global & Media Keybinds:** Control playback using custom keybinds that can be accessed anywhere (`Alt` on Windows, `Option`/`Command` on macOS).
 * **Dynamic System Tray:** Real-time hover tooltips (`LoFi HUD — ▶ Track Name`), 1-click library rescan, and instant music folder access.
 * **Smart Track Title Cleaning:** Automatically strips downloader prefixes, track numbering, bitrates, and video tags for a clean display.
-* **Auto Startup & Windows Search:** Automatically starts up after Windows restarts.
+* **Auto Startup:** Starts up automatically on login via Windows Startup or macOS LaunchAgent.
 * **Bluetooth Auto-Pause:** Automatically pauses playback when your selected Bluetooth device disconnects.
 
 ---
@@ -20,9 +20,8 @@ LoFi HUD operates silently in the system tray, responds to global hotkeys (and n
 ## 🚀 How to Install
 
 ### Option 1: One-Click Installer (Recommended)
-1. Download **`LoFiHUD_Setup_v1.0.0.exe`** from the [Releases](https://github.com/rutamt/lofi-player/releases) page.
-2. Run the installer wizard. No Administrator / UAC rights are required, and neither Python nor VLC needs to be pre-installed—everything is fully self-contained!
-3. The app will launch directly into your system tray and will automatically appear in Windows Search.
+* **🪟 Windows:** Download **`LoFiHUD_Setup_v1.0.1.exe`** from the [Releases](https://github.com/rutamt/lofi-player/releases) page and run the setup wizard. No Administrator / UAC rights required!
+* **🍏 macOS:** Download **`LoFiHUD_v1.0.1.dmg`** from the [Releases](https://github.com/rutamt/lofi-player/releases) page, open it, and drag **LoFi HUD** into your **Applications** folder.
 
 ### Option 2: Running from Source
 1. Clone the repository:
@@ -41,11 +40,12 @@ LoFi HUD operates silently in the system tray, responds to global hotkeys (and n
 
 ### 🗑 Uninstallation
 LoFi HUD is designed to uninstall completely cleanly:
-* **Via Windows Settings:** Go to **Settings** → **Apps** → **Installed apps**, search for **LoFi HUD**, and click **Uninstall**.
+* **Windows:** Go to **Settings** → **Apps** → **Installed apps**, search for **LoFi HUD**, and click **Uninstall** (or click Uninstall in the LoFi HUD settings footer).
+* **macOS:** Click **Uninstall** in the LoFi HUD settings footer (or run `python lofi_hud.py --uninstall`).
 * **Via Command Line:** Run `lofi_hud.exe --uninstall` (or `python lofi_hud.py --uninstall`).
 
 > [!NOTE]
-> The uninstaller removes all application files, Start Menu shortcuts, autostart entries, and AppData settings. By default, **your music folder and songs are safely preserved**, but you can optionally choose to delete the music folder as well when prompted.
+> The uninstaller removes all application files, shortcuts, autostart entries, and AppData settings. By default, **your music folder and songs are safely preserved**, but you can optionally choose to delete the music folder as well when prompted.
 
 ---
 

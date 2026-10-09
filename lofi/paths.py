@@ -21,15 +21,23 @@ def bundle_dir() -> str:
 
 
 def user_data_dir() -> str:
-    """Directory for persisting configuration in standard Windows AppData."""
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        path = os.path.join(appdata, "LoFiHUD")
+    """Directory for persisting configuration in standard OS application data."""
+    if sys.platform == "darwin":
+        path = os.path.expanduser("~/Library/Application Support/LoFiHUD")
         try:
             os.makedirs(path, exist_ok=True)
             return path
         except OSError:
             pass
+    elif sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            path = os.path.join(appdata, "LoFiHUD")
+            try:
+                os.makedirs(path, exist_ok=True)
+                return path
+            except OSError:
+                pass
     return application_dir()
 
 
@@ -46,12 +54,17 @@ def default_music_dir() -> str:
     local_lofi = os.path.join(application_dir(), "Lofi")
     if os.path.exists(local_lofi):
         return local_lofi
-    # Otherwise default to standard user Music\LoFi directory
+    # Otherwise default to standard user Music/LoFi directory
     user_music = os.path.join(os.path.expanduser("~"), "Music", "LoFi")
     return user_music
 
 
 def icon_path() -> str:
+    if sys.platform == "darwin":
+        for name in ("icon.icns", "icon.png", "icon.ico"):
+            p = os.path.join(bundle_dir(), name)
+            if os.path.exists(p):
+                return p
     return os.path.join(bundle_dir(), "icon.ico")
 
 

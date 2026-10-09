@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import random
 import shutil
+import sys
 from typing import List, Optional
 
 from lofi.names import clean_title_from_mrl, mrl_to_local_path
@@ -20,28 +21,40 @@ VALID_EXTENSIONS = (
     ".opus",
     ".wma",
 )
-VLC_CANDIDATES = (
+WIN_VLC_CANDIDATES = (
     r"C:\Program Files\VideoLAN\VLC",
     r"C:\Program Files (x86)\VideoLAN\VLC",
+)
+MAC_VLC_CANDIDATES = (
+    "/Applications/VLC.app/Contents/MacOS/lib",
+    "/opt/homebrew/lib",
+    "/usr/local/lib",
 )
 
 
 def find_vlc_dir() -> Optional[str]:
     # Check bundled/portable paths first
     base = application_dir()
+    lib_name = "libvlc.dylib" if sys.platform == "darwin" else "libvlc.dll"
+
     local_candidates = [
         base,
         os.path.join(base, "vlc"),
         os.path.join(base, "_internal"),
         os.path.join(base, "_internal", "vlc"),
     ]
+    if sys.platform == "darwin":
+        local_candidates.append(os.path.join(base, "..", "Frameworks"))
+        local_candidates.append(os.path.join(base, "lib"))
+
     for path in local_candidates:
-        if os.path.exists(os.path.join(path, "libvlc.dll")):
-            return path
+        if os.path.exists(os.path.join(path, lib_name)):
+            return os.path.abspath(path)
 
     # Check system installation candidates
-    for path in VLC_CANDIDATES:
-        if os.path.exists(path):
+    system_candidates = MAC_VLC_CANDIDATES if sys.platform == "darwin" else WIN_VLC_CANDIDATES
+    for path in system_candidates:
+        if os.path.exists(os.path.join(path, lib_name)) or (sys.platform == "win32" and os.path.exists(path)):
             return path
     return None
 
@@ -51,8 +64,9 @@ def configure_vlc_env() -> Optional[str]:
     vlc_dir = find_vlc_dir()
     if not vlc_dir:
         return None
+    lib_name = "libvlc.dylib" if sys.platform == "darwin" else "libvlc.dll"
     os.environ["PYTHON_VLC_MODULE_PATH"] = vlc_dir
-    os.environ["PYTHON_VLC_LIB_PATH"] = os.path.join(vlc_dir, "libvlc.dll")
+    os.environ["PYTHON_VLC_LIB_PATH"] = os.path.join(vlc_dir, lib_name)
     os.environ["PATH"] = vlc_dir + os.pathsep + os.environ.get("PATH", "")
     return vlc_dir
 

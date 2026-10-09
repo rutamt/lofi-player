@@ -12,6 +12,8 @@ from lofi.uninstall import clean_uninstall
 
 
 def enable_dpi_awareness() -> None:
+    if sys.platform != "win32":
+        return
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:

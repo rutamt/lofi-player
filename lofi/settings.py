@@ -519,7 +519,16 @@ class SettingsWindow(ctk.CTkToplevel):
         try:
             if not os.path.exists(path):
                 os.makedirs(path, exist_ok=True)
-            os.startfile(path)
+            if hasattr(os, "startfile"):
+                os.startfile(path)
+            elif sys.platform == "darwin":
+                import subprocess
+
+                subprocess.Popen(["open", path])
+            else:
+                import subprocess
+
+                subprocess.Popen(["xdg-open", path])
         except Exception:
             pass
 
@@ -556,7 +565,8 @@ class SettingsWindow(ctk.CTkToplevel):
 
         row = self._row(card, "Hold Modifier")
         self._mod_var = ctk.StringVar(value=config.mod_key.upper())
-        self._menu(row, self._mod_var, ["ALT", "CTRL", "SHIFT"], width=160)
+        mod_options = ["CMD", "OPTION", "CTRL", "SHIFT"] if sys.platform == "darwin" else ["ALT", "CTRL", "SHIFT"]
+        self._menu(row, self._mod_var, mod_options, width=160)
 
         for label, key_name in BIND_ROWS:
             self._add_bind_row(card, label, key_name)

@@ -159,12 +159,14 @@ class HotkeyController:
 
     def _modifier_pressed(self, mod: str) -> bool:
         name = mod.lower()
-        if name == "alt":
+        if name in ("alt", "option"):
             targets = (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r)
-        elif name == "ctrl":
+        elif name in ("ctrl", "control"):
             targets = (keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r)
         elif name == "shift":
             targets = (keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r)
+        elif name in ("cmd", "command"):
+            targets = (keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r)
         else:
             return False
         return any(item in self._pressed_keys for item in targets)
