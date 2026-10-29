@@ -137,16 +137,79 @@ THEMES: Dict[str, Theme] = {
         danger="#d20f39",
         danger_hover="#e64553",
     ),
+    "system_light": Theme(
+        id="system_light",
+        label="System Light",
+        appearance="light",
+        bg="#f5f5f7",
+        surface="#ffffff",
+        surface_alt="#eaeaec",
+        border="#d2d2d7",
+        fg="#1d1d1f",
+        muted="#86868b",
+        accent="#0071e3",
+        accent_hover="#0077ed",
+        accent_on_accent="#ffffff",
+        hud_bg="#ffffff",
+        hud_fg="#0071e3",
+        danger="#ff3b30",
+        danger_hover="#d70015",
+    ),
 }
 
-DEFAULT_THEME_ID = "harbor_night"
+DEFAULT_THEME_ID = "system"
+
+
+def is_system_dark() -> bool:
+    """Detect whether the host OS is currently using a dark theme."""
+    import sys
+
+    if sys.platform == "darwin":
+        try:
+            from Cocoa import NSUserDefaults
+
+            val = NSUserDefaults.standardUserDefaults().stringForKey_("AppleInterfaceStyle")
+            if val is not None:
+                return str(val).lower() == "dark"
+            return False
+        except Exception:
+            pass
+        try:
+            import subprocess
+
+            res = subprocess.run(
+                ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                capture_output=True,
+                text=True,
+            )
+            return res.stdout.strip().lower() == "dark"
+        except Exception:
+            pass
+    elif sys.platform == "win32":
+        try:
+            import winreg
+
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            )
+            val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return val == 0
+        except Exception:
+            pass
+    try:
+        import customtkinter.windows.widgets.appearance_mode.appearance_mode_tracker as amt
+
+        return amt.AppearanceModeTracker.get_mode() == 1
+    except Exception:
+        return True
 
 _LEGACY_THEME_NAMES = {
     "Midnight Blue": "harbor_night",
     "Nordic Clean": "polar_dusk",
     "Forest Glow": "gruvbox",
     "Cherry Blossom": "rose_pine",
-    "Minimal Light": "latte",
+    "Minimal Light": "system_light",
     "Cyberpunk": "tokyo_night",
     "Harbor Night": "harbor_night",
     "Polar Dusk": "polar_dusk",
@@ -158,6 +221,7 @@ _LEGACY_THEME_NAMES = {
     "Rosé Pine": "rose_pine",
     "Gruvbox Warm": "gruvbox",
     "Catppuccin Latte": "latte",
+    "System Light": "system_light",
     "canopy": "gruvbox",
     "hanami": "rose_pine",
     "paper": "latte",
@@ -167,14 +231,14 @@ _LEGACY_THEME_NAMES = {
 
 def resolve_theme_id(value: str | None) -> str:
     """Map a stored theme id or legacy display name onto a known palette."""
-    if not value:
-        return DEFAULT_THEME_ID
+    if not value or str(value).lower() in ("system", "system (auto)", "auto"):
+        return "harbor_night" if is_system_dark() else "system_light"
     if value in THEMES:
         return value
     mapped = _LEGACY_THEME_NAMES.get(value)
     if mapped and mapped in THEMES:
         return mapped
-    return DEFAULT_THEME_ID
+    return "harbor_night" if is_system_dark() else "system_light"
 
 
 def get_theme(theme_id: str | None) -> Theme:
@@ -182,14 +246,17 @@ def get_theme(theme_id: str | None) -> Theme:
 
 
 def theme_labels() -> List[str]:
-    return [theme.label for theme in THEMES.values()]
+    return ["System (Auto)"] + [theme.label for theme in THEMES.values()]
 
 
 def theme_id_for_label(label: str) -> str:
+    if label in ("System (Auto)", "System", "Auto"):
+        return "system"
     for theme in THEMES.values():
         if theme.label == label:
             return theme.id
     mapped = _LEGACY_THEME_NAMES.get(label)
     if mapped and mapped in THEMES:
         return mapped
-    return DEFAULT_THEME_ID
+    return "system"
+

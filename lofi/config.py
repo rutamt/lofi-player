@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass, fields, replace
 from typing import Any, Dict, Optional
 
@@ -43,7 +44,7 @@ _FIELD_NAMES = {item.name for item in fields(AppConfig)}
 def default_config() -> AppConfig:
     return AppConfig(
         music_dir=default_music_dir(),
-        mod_key="alt",
+        mod_key="option" if sys.platform == "darwin" else "alt",
         key_play="q",
         key_next="2",
         key_prev="1",

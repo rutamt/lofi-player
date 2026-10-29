@@ -50,9 +50,9 @@ def config_path() -> str:
 
 
 def default_music_dir() -> str:
-    # If local Lofi folder exists (portable / repository mode), use it
+    # If a standalone local Lofi music folder exists (and is not our python code package), use it
     local_lofi = os.path.join(application_dir(), "Lofi")
-    if os.path.exists(local_lofi):
+    if os.path.exists(local_lofi) and not os.path.exists(os.path.join(local_lofi, "__init__.py")):
         return local_lofi
     # Otherwise default to standard user Music/LoFi directory
     user_music = os.path.join(os.path.expanduser("~"), "Music", "LoFi")
@@ -66,6 +66,16 @@ def icon_path() -> str:
             if os.path.exists(p):
                 return p
     return os.path.join(bundle_dir(), "icon.ico")
+
+
+def tray_icon_path() -> Optional[str]:
+    """Path to dedicated status bar / menu bar icon if provided (e.g. tray_icon.png)."""
+    for name in ("tray_icon.png", "tray.png", "menu_icon.png", "tray_icon.ico", "tray.ico"):
+        p = os.path.join(bundle_dir(), name)
+        if os.path.exists(p):
+            return p
+    return None
+
 
 
 def ignored_dir_for(music_dir: str) -> str:

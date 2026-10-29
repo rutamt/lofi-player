@@ -35,6 +35,8 @@ if ! command -v "$PYINSTALLER" &>/dev/null && [ ! -f "$PYINSTALLER" ]; then
     exit 1
 fi
 
+export PYINSTALLER_CONFIG_DIR="${TMPDIR:-/tmp}/pyinstaller_cache"
+
 # Extract version from lofi/__init__.py
 VERSION=$($PYTHON -c "import lofi; print(lofi.__version__)" 2>/dev/null || echo "1.0.1")
 echo "📦 Detected LoFi HUD version: v${VERSION}"
@@ -78,6 +80,9 @@ if [ ! -d "dist/LoFi HUD.app" ]; then
     exit 1
 fi
 
+echo "🔏 Signing application bundle with ad-hoc signature..."
+codesign --force --deep -s - "dist/LoFi HUD.app"
+
 # Set up DMG staging folder
 echo "📂 Preparing DMG drag-and-drop staging layout..."
 mkdir -p dist/dmg_staging
@@ -94,8 +99,9 @@ hdiutil create \
     -format UDZO \
     "${DMG_OUTPUT}"
 
-# Clean staging folder
+# Clean staging folder and intermediate collect directories
 rm -rf dist/dmg_staging
+rm -rf dist/lofi_hud dist/lofi_hud.app
 
 echo "===================================================="
 echo "✅ LoFi HUD macOS build completed successfully!"

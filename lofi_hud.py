@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import ctypes
-
+import os
 import sys
+
+if sys.platform == "darwin":
+    os.environ.setdefault("TK_SILENCE_DEPRECATION", "1")
 
 from lofi.app import App
 from lofi.instance import SingleInstance

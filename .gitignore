@@ -9,6 +9,8 @@ env/
 # PyInstaller build directories and files
 build/
 dist/
+icon.icns
+icon.png
 *.spec
 !lofi_hud.spec
 !lofi_hud_mac.spec
@@ -28,5 +30,6 @@ lofi/**/__pycache__/
 *.mp3
 *.wav
 
-# Private developer documentation
 DEV_RELEASE_GUIDE.md
+.DS_Store
+

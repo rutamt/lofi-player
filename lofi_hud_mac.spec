@@ -6,7 +6,7 @@ hiddenimports = ['pynput.keyboard._darwin', 'lofi.app']
 hiddenimports += collect_submodules('lofi')
 
 datas = []
-for icon_name in ['icon.ico', 'icon.icns', 'icon.png']:
+for icon_name in ['icon.ico', 'icon.icns', 'icon.png', 'tray_icon.png', 'tray.png', 'menu_icon.png']:
     if os.path.exists(icon_name):
         datas.append((icon_name, '.'))
 

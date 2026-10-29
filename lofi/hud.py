@@ -228,16 +228,289 @@ def _parse_message(
     return icon or "music", badge or "LOFI HUD", title or message, progress
 
 
+def _hex_to_nscolor(hex_str: str, alpha: float = 1.0) -> Any:
+    """Convert hex color string to AppKit.NSColor."""
+    try:
+        import AppKit
+        s = hex_str.lstrip("#")
+        if len(s) == 6:
+            r = int(s[0:2], 16) / 255.0
+            g = int(s[2:4], 16) / 255.0
+            b = int(s[4:6], 16) / 255.0
+            return AppKit.NSColor.colorWithSRGBRed_green_blue_alpha_(r, g, b, alpha)
+        return AppKit.NSColor.whiteColor()
+    except Exception:
+        return None
+
+
+DARWIN_SYMBOL_MAP = {
+    "play": "play.fill",
+    "pause": "pause.fill",
+    "volume": "speaker.wave.2.fill",
+    "trash": "trash.fill",
+    "settings": "checkmark",
+    "check": "checkmark",
+    "error": "xmark",
+    "music": "music.note",
+}
+
+try:
+    import warnings
+    import objc
+    warnings.filterwarnings("ignore", category=objc.ObjCPointerWarning)
+except Exception:
+    pass
+
+
+class _DarwinGlassHud:
+    """Hardware-accelerated native macOS liquid glass HUD overlay using AppKit."""
+
+    def __init__(self, root: tk.Misc) -> None:
+        import AppKit
+
+        self._root = root
+        self._hide_timer: Optional[str] = None
+        self._theme: Optional[Theme] = None
+
+        self._panel = AppKit.NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
+            AppKit.NSMakeRect(100, 100, 320, 68),
+            AppKit.NSWindowStyleMaskBorderless,
+            AppKit.NSBackingStoreBuffered,
+            False,
+        )
+        self._panel.setOpaque_(False)
+        self._panel.setBackgroundColor_(AppKit.NSColor.clearColor())
+        self._panel.setLevel_(AppKit.NSStatusWindowLevel)
+        self._panel.setHasShadow_(True)
+        self._panel.setHidesOnDeactivate_(False)
+        self._panel.setIgnoresMouseEvents_(True)
+        self._panel.setAlphaValue_(0.0)
+
+        cv = self._panel.contentView()
+        self._ve = AppKit.NSVisualEffectView.alloc().initWithFrame_(cv.bounds())
+        self._ve.setMaterial_(AppKit.NSVisualEffectMaterialHUDWindow)
+        self._ve.setBlendingMode_(AppKit.NSVisualEffectBlendingModeBehindWindow)
+        self._ve.setState_(AppKit.NSVisualEffectStateActive)
+        self._ve.setWantsLayer_(True)
+        self._ve.layer().setCornerRadius_(20.0)
+        self._ve.layer().setMasksToBounds_(True)
+        self._ve.layer().setBorderWidth_(1.0)
+        self._ve.layer().setBorderColor_(AppKit.NSColor.colorWithWhite_alpha_(1.0, 0.22).CGColor())
+        self._ve.setAutoresizingMask_(18)
+        cv.addSubview_(self._ve)
+
+        # Icon tile container
+        self._tile = AppKit.NSView.alloc().initWithFrame_(AppKit.NSMakeRect(14, 14, 40, 40))
+        self._tile.setWantsLayer_(True)
+        self._tile.layer().setCornerRadius_(11.0)
+        self._tile.layer().setMasksToBounds_(True)
+        self._tile.layer().setBackgroundColor_(AppKit.NSColor.colorWithWhite_alpha_(1.0, 0.10).CGColor())
+        self._tile.layer().setBorderColor_(AppKit.NSColor.colorWithWhite_alpha_(1.0, 0.20).CGColor())
+        self._tile.layer().setBorderWidth_(1.0)
+        self._ve.addSubview_(self._tile)
+
+        # Icon image view
+        self._icon_view = AppKit.NSImageView.alloc().initWithFrame_(AppKit.NSMakeRect(9, 9, 22, 22))
+        self._tile.addSubview_(self._icon_view)
+
+        # Header badge label
+        self._badge = AppKit.NSTextField.labelWithString_("NOW PLAYING")
+        self._badge.setFrame_(AppKit.NSMakeRect(66, 38, 160, 16))
+        self._badge.setFont_(AppKit.NSFont.boldSystemFontOfSize_(10.0))
+        self._ve.addSubview_(self._badge)
+
+        # Volume percent label (right aligned)
+        self._percent = AppKit.NSTextField.labelWithString_("")
+        self._percent.setFont_(AppKit.NSFont.boldSystemFontOfSize_(10.0))
+        self._percent.setAlignment_(AppKit.NSTextAlignmentRight)
+        self._ve.addSubview_(self._percent)
+
+        # Main Title label
+        self._title = AppKit.NSTextField.labelWithString_("")
+        self._title.setFrame_(AppKit.NSMakeRect(66, 14, 230, 22))
+        self._title.setFont_(AppKit.NSFont.systemFontOfSize_weight_(14.0, AppKit.NSFontWeightSemibold))
+        self._title.setLineBreakMode_(AppKit.NSLineBreakByTruncatingTail)
+        self._ve.addSubview_(self._title)
+
+        # Progress bar track & fill for volume
+        self._prog_track = AppKit.NSView.alloc().initWithFrame_(AppKit.NSMakeRect(66, 20, 210, 6))
+        self._prog_track.setWantsLayer_(True)
+        self._prog_track.layer().setCornerRadius_(3.0)
+        self._prog_track.layer().setMasksToBounds_(True)
+        self._prog_track.layer().setBackgroundColor_(AppKit.NSColor.colorWithWhite_alpha_(1.0, 0.15).CGColor())
+
+        self._prog_fill = AppKit.NSView.alloc().initWithFrame_(AppKit.NSMakeRect(0, 0, 0, 6))
+        self._prog_fill.setWantsLayer_(True)
+        self._prog_fill.layer().setCornerRadius_(3.0)
+        self._prog_track.addSubview_(self._prog_fill)
+        self._ve.addSubview_(self._prog_track)
+
+    def apply_theme(self, theme: Theme) -> None:
+        import AppKit
+
+        self._theme = theme
+        is_light = getattr(theme, "appearance", "dark") == "light"
+
+        accent_ns = _hex_to_nscolor(theme.accent)
+        muted_ns = _hex_to_nscolor(theme.muted)
+        fg_ns = _hex_to_nscolor(theme.fg)
+
+        if is_light:
+            self._ve.setMaterial_(AppKit.NSVisualEffectMaterialPopover)
+            self._ve.layer().setBorderColor_(AppKit.NSColor.colorWithWhite_alpha_(0.0, 0.12).CGColor())
+            self._tile.layer().setBackgroundColor_(AppKit.NSColor.colorWithWhite_alpha_(0.0, 0.05).CGColor())
+            self._tile.layer().setBorderColor_(AppKit.NSColor.colorWithWhite_alpha_(0.0, 0.10).CGColor())
+            self._prog_track.layer().setBackgroundColor_(AppKit.NSColor.colorWithWhite_alpha_(0.0, 0.12).CGColor())
+        else:
+            self._ve.setMaterial_(AppKit.NSVisualEffectMaterialHUDWindow)
+            self._ve.layer().setBorderColor_(AppKit.NSColor.colorWithWhite_alpha_(1.0, 0.22).CGColor())
+            self._tile.layer().setBackgroundColor_(AppKit.NSColor.colorWithWhite_alpha_(1.0, 0.10).CGColor())
+            self._tile.layer().setBorderColor_(AppKit.NSColor.colorWithWhite_alpha_(1.0, 0.20).CGColor())
+            self._prog_track.layer().setBackgroundColor_(AppKit.NSColor.colorWithWhite_alpha_(1.0, 0.15).CGColor())
+
+        self._badge.setTextColor_(accent_ns)
+        self._percent.setTextColor_(muted_ns)
+        self._title.setTextColor_(fg_ns)
+        self._icon_view.setContentTintColor_(accent_ns)
+        self._prog_fill.layer().setBackgroundColor_(accent_ns.CGColor())
+
+    def show(
+        self,
+        message: str,
+        config: AppConfig,
+        duration_override: Optional[int] = None,
+        *,
+        badge: Optional[str] = None,
+        title: Optional[str] = None,
+        icon: Optional[str] = None,
+        progress: Optional[int] = None,
+    ) -> None:
+        import AppKit
+
+        theme = get_theme(config.theme)
+        self.apply_theme(theme)
+
+        icon_val, badge_val, title_val, prog_val = _parse_message(
+            message, badge=badge, title=title, icon=icon, progress=progress
+        )
+
+        sym_name = DARWIN_SYMBOL_MAP.get(icon_val, "music.note")
+        sym = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_(sym_name, None)
+        if sym:
+            cfg = AppKit.NSImageSymbolConfiguration.configurationWithPointSize_weight_(16.0, AppKit.NSFontWeightBold)
+            sym = sym.imageWithSymbolConfiguration_(cfg)
+            self._icon_view.setImage_(sym)
+
+        self._badge.setStringValue_(badge_val)
+
+        hud_h = 68
+        if prog_val is not None:
+            hud_w = 300
+            self._title.setHidden_(True)
+            self._prog_track.setHidden_(False)
+            self._percent.setHidden_(False)
+            self._percent.setStringValue_(f"{prog_val}%")
+            self._percent.setFrame_(AppKit.NSMakeRect(hud_w - 75, 38, 55, 16))
+
+            track_w = hud_w - 86
+            self._prog_track.setFrame_(AppKit.NSMakeRect(66, 20, track_w, 6))
+            fill_w = max(0, min(track_w, int(track_w * (prog_val / 100.0))))
+            self._prog_fill.setFrame_(AppKit.NSMakeRect(0, 0, fill_w, 6))
+        else:
+            self._percent.setHidden_(True)
+            self._prog_track.setHidden_(True)
+            self._title.setHidden_(False)
+            display_title = title_val
+            if len(display_title) > 42:
+                display_title = display_title[:39] + "..."
+            self._title.setStringValue_(display_title)
+
+            font = self._title.font()
+            str_size = AppKit.NSString.stringWithString_(display_title).sizeWithAttributes_({
+                AppKit.NSFontAttributeName: font
+            })
+            calc_w = int(str_size.width) + 90
+            hud_w = max(240, min(420, calc_w))
+            self._title.setFrame_(AppKit.NSMakeRect(66, 14, hud_w - 80, 22))
+
+        screen = AppKit.NSScreen.mainScreen()
+        vf = screen.visibleFrame() if screen else AppKit.NSMakeRect(0, 0, 1440, 900)
+        pad_x, pad_y = 30, 40
+        pos = config.hud_position
+
+        if pos == "Top Left":
+            x = vf.origin.x + pad_x
+            y = vf.origin.y + vf.size.height - hud_h - pad_y
+        elif pos == "Top Center":
+            x = vf.origin.x + (vf.size.width - hud_w) / 2
+            y = vf.origin.y + vf.size.height - hud_h - pad_y
+        elif pos == "Top Right":
+            x = vf.origin.x + vf.size.width - hud_w - pad_x
+            y = vf.origin.y + vf.size.height - hud_h - pad_y
+        elif pos == "Bottom Left":
+            x = vf.origin.x + pad_x
+            y = vf.origin.y + pad_y
+        elif pos == "Bottom Right":
+            x = vf.origin.x + vf.size.width - hud_w - pad_x
+            y = vf.origin.y + pad_y
+        elif pos == "Center":
+            x = vf.origin.x + (vf.size.width - hud_w) / 2
+            y = vf.origin.y + (vf.size.height - hud_h) / 2
+        else:  # Bottom Center
+            x = vf.origin.x + (vf.size.width - hud_w) / 2
+            y = vf.origin.y + pad_y
+
+        self._panel.setFrame_display_(AppKit.NSMakeRect(x, y, hud_w, hud_h), True)
+        self._panel.invalidateShadow()
+
+        if self._hide_timer is not None:
+            self._root.after_cancel(self._hide_timer)
+            self._hide_timer = None
+
+        self._panel.setAlphaValue_(0.96)
+        self._panel.orderFrontRegardless()
+
+        timeout = duration_override if duration_override is not None else config.hud_timeout
+        self._hide_timer = self._root.after(timeout, self.hide)
+
+    def hide(self) -> None:
+        import AppKit
+
+        if self._hide_timer is not None:
+            self._root.after_cancel(self._hide_timer)
+            self._hide_timer = None
+
+        try:
+            AppKit.NSAnimationContext.beginGrouping()
+            AppKit.NSAnimationContext.currentContext().setDuration_(0.18)
+            self._panel.animator().setAlphaValue_(0.0)
+            AppKit.NSAnimationContext.endGrouping()
+            self._root.after(200, lambda: self._panel.orderOut_(None))
+        except Exception:
+            self._panel.orderOut_(None)
+
+
 class Hud:
     """Modern floating toast overlay anchored to main display with clean vector icons."""
+
+    def __new__(cls, root: tk.Misc) -> Any:
+        if sys.platform == "darwin":
+            try:
+                return _DarwinGlassHud(root)
+            except Exception:
+                pass
+        return super().__new__(cls)
 
     def __init__(self, root: tk.Misc) -> None:
         self._root = root
         self._hide_timer: Optional[str] = None
         self._fade_timer: Optional[str] = None
-        self._target_alpha = 0.98
+        self._is_darwin = sys.platform == "darwin"
+        self._target_alpha = 0.96 if self._is_darwin else 0.98
         self._is_visible = False
         self._icon_cache: Dict[Tuple[str, str], ctk.CTkImage] = {}
+        self._ns_window = None
+        self._ve_view = None
 
         self._window = ctk.CTkToplevel(root)
         self._window.overrideredirect(True)
@@ -245,22 +518,27 @@ class Hud:
         self._window.attributes("-alpha", 0.0)
         self._window.withdraw()
 
-        self._apply_win32_styles()
+        if self._is_darwin:
+            self._apply_darwin_styles()
+        else:
+            self._apply_win32_styles()
 
-        # Outer card container - fills window completely with 1px border
+        # Outer card container - smooth modern capsule corner radius on macOS
+        card_radius = 20 if self._is_darwin else 14
         self._container = ctk.CTkFrame(
             self._window,
-            corner_radius=14,
+            corner_radius=card_radius,
             border_width=1,
         )
         self._container.pack(fill="both", expand=True)
 
         # Left: Icon avatar box
+        icon_radius = 12 if self._is_darwin else 10
         self._icon_box = ctk.CTkFrame(
             self._container,
             width=40,
             height=40,
-            corner_radius=10,
+            corner_radius=icon_radius,
             border_width=1,
         )
         self._icon_box.pack(side="left", padx=(12, 10), pady=10)
@@ -315,6 +593,57 @@ class Hud:
             border_width=0,
         )
 
+    def _apply_darwin_styles(self) -> None:
+        """Configure hardware-accelerated liquid glass blur and shadow on macOS."""
+        try:
+            import AppKit
+
+            self._window.title("__LOFI_HUD_OVERLAY__")
+            self._window.attributes("-transparent", 1)
+            self._window.configure(fg_color="systemTransparent")
+            self._window.config(bg="systemTransparent")
+
+            # Realize the native Cocoa window so AppKit can locate and configure it
+            self._window.deiconify()
+            self._window.update_idletasks()
+
+            app = AppKit.NSApplication.sharedApplication()
+            for win in app.windows():
+                if win.title() == "__LOFI_HUD_OVERLAY__":
+                    win.setOpaque_(False)
+                    win.setBackgroundColor_(AppKit.NSColor.clearColor())
+                    win.setHasShadow_(True)
+
+                    cv = win.contentView()
+                    tf = cv.superview() if cv is not None else None
+                    ve = None
+                    if tf is not None:
+                        for sv in tf.subviews():
+                            if isinstance(sv, AppKit.NSVisualEffectView):
+                                ve = sv
+                                break
+                    if ve is None and cv is not None:
+                        ve = AppKit.NSVisualEffectView.alloc().initWithFrame_(cv.bounds())
+                        ve.setAutoresizingMask_(18)
+                        cv.addSubview_positioned_relativeTo_(ve, AppKit.NSWindowBelow, None)
+
+                    if ve is not None:
+                        ve.setMaterial_(AppKit.NSVisualEffectMaterialHUDWindow)
+                        ve.setBlendingMode_(AppKit.NSVisualEffectBlendingModeBehindWindow)
+                        ve.setState_(AppKit.NSVisualEffectStateActive)
+                        ve.setWantsLayer_(True)
+                        ve.layer().setCornerRadius_(20.0)
+                        ve.layer().setMasksToBounds_(True)
+
+                    win.invalidateShadow()
+                    self._ns_window = win
+                    self._ve_view = ve
+                    break
+
+            self._window.withdraw()
+        except Exception:
+            pass
+
     def _apply_win32_styles(self) -> None:
         """Configure non-activating style and Windows 11 rounded corners."""
         if sys.platform != "win32":
@@ -337,15 +666,49 @@ class Hud:
     def apply_theme(self, theme: Theme) -> None:
         """Apply theme color tokens across the HUD components."""
         self._theme = theme
-        self._window.configure(fg_color=theme.surface)
-        self._container.configure(
-            fg_color=theme.surface,
-            border_color=theme.border,
-        )
-        self._icon_box.configure(
-            fg_color=theme.bg,
-            border_color=theme.border,
-        )
+
+        if self._is_darwin and self._ve_view is not None:
+            try:
+                import AppKit
+
+                # Adaptive blur material for light vs dark appearance
+                if getattr(theme, "appearance", "dark") == "light":
+                    self._ve_view.setMaterial_(AppKit.NSVisualEffectMaterialPopover)
+                else:
+                    self._ve_view.setMaterial_(AppKit.NSVisualEffectMaterialHUDWindow)
+
+                rim_color = _glass_rim_color(theme.border, getattr(theme, "appearance", "dark"))
+                self._window.configure(fg_color="systemTransparent")
+                self._window.config(bg="systemTransparent")
+                self._container.configure(
+                    fg_color="transparent",
+                    border_color=rim_color,
+                )
+                self._icon_box.configure(
+                    fg_color="transparent",
+                    border_color=rim_color,
+                )
+            except Exception:
+                self._window.configure(fg_color=theme.surface)
+                self._container.configure(
+                    fg_color=theme.surface,
+                    border_color=theme.border,
+                )
+                self._icon_box.configure(
+                    fg_color=theme.bg,
+                    border_color=theme.border,
+                )
+        else:
+            self._window.configure(fg_color=theme.surface)
+            self._container.configure(
+                fg_color=theme.surface,
+                border_color=theme.border,
+            )
+            self._icon_box.configure(
+                fg_color=theme.bg,
+                border_color=theme.border,
+            )
+
         self._badge_label.configure(text_color=theme.accent)
         self._percent_label.configure(text_color=theme.muted)
         self._title_label.configure(text_color=theme.fg)
@@ -438,6 +801,11 @@ class Hud:
             y = mon_y + mon_h - hud_h - pad_y
 
         self._window.geometry(f"{hud_w}x{hud_h}+{x}+{y}")
+        if self._ns_window is not None:
+            try:
+                self._ns_window.invalidateShadow()
+            except Exception:
+                pass
 
         # Cancel any pending timers
         if self._fade_timer is not None:

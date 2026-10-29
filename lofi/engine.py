@@ -65,9 +65,35 @@ def configure_vlc_env() -> Optional[str]:
     if not vlc_dir:
         return None
     lib_name = "libvlc.dylib" if sys.platform == "darwin" else "libvlc.dll"
+
+    # On macOS, libvlc links against @rpath/libvlccore.dylib. Pre-load it into memory so dyld resolves it.
+    if sys.platform == "darwin":
+        for core_candidate in (
+            os.path.join(vlc_dir, "libvlccore.dylib"),
+            os.path.join(os.path.dirname(vlc_dir), "lib", "libvlccore.dylib"),
+        ):
+            if os.path.exists(core_candidate):
+                try:
+                    import ctypes
+
+                    ctypes.CDLL(core_candidate)
+                except Exception:
+                    pass
+                break
+
     os.environ["PYTHON_VLC_MODULE_PATH"] = vlc_dir
     os.environ["PYTHON_VLC_LIB_PATH"] = os.path.join(vlc_dir, lib_name)
     os.environ["PATH"] = vlc_dir + os.pathsep + os.environ.get("PATH", "")
+
+    # Set VLC_PLUGIN_PATH environment variable for cross-platform plugin discovery
+    for plugin_candidate in (
+        os.path.join(vlc_dir, "plugins"),
+        os.path.join(os.path.dirname(vlc_dir), "plugins"),
+    ):
+        if os.path.isdir(plugin_candidate):
+            os.environ["VLC_PLUGIN_PATH"] = plugin_candidate
+            break
+
     return vlc_dir
 
 
@@ -91,7 +117,6 @@ class Player:
         except (OSError, ImportError):
             return
 
-        plugin_path = os.path.join(vlc_dir, "plugins")
         try:
             self._instance = vlc.Instance(
                 "--no-video",
@@ -99,7 +124,6 @@ class Player:
                 "--no-sub-autodetect-file",
                 "--no-osd",
                 "--quiet",
-                "--plugin-path={}".format(plugin_path),
             )
             self._list_player = self._instance.media_list_player_new()
             self._media_player = self._list_player.get_media_player()

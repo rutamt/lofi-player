@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
+import queue
 import subprocess
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 import customtkinter as ctk
 
@@ -62,6 +63,16 @@ def install_start_menu_shortcut() -> None:
         pass
 
 
+def _get_mac_launch_args() -> list[str]:
+    app_path = "/Applications/LoFi HUD.app"
+    if os.path.exists(app_path):
+        return ["/usr/bin/open", "-a", app_path]
+    if getattr(sys, "frozen", False):
+        return [sys.executable]
+    script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "lofi_hud.py"))
+    return [sys.executable, script]
+
+
 def sync_autostart(enabled: bool) -> None:
     """Configure autostart on Windows (Startup folder) or macOS (LaunchAgent)."""
     if sys.platform == "win32":
@@ -95,7 +106,8 @@ def sync_autostart(enabled: bool) -> None:
             os.makedirs(agent_dir, exist_ok=True)
             plist_path = os.path.join(agent_dir, "com.rutamt.lofihud.plist")
             if enabled:
-                target = _get_target_executable()
+                args = _get_mac_launch_args()
+                args_xml = "\n".join(f"        <string>{a}</string>" for a in args)
                 plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -104,7 +116,7 @@ def sync_autostart(enabled: bool) -> None:
     <string>com.rutamt.lofihud</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{target}</string>
+{args_xml}
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -120,6 +132,7 @@ def sync_autostart(enabled: bool) -> None:
                     os.remove(plist_path)
         except Exception:
             pass
+
 
 
 def ensure_music_dir(path: str) -> None:
@@ -147,6 +160,12 @@ class App:
         self.root.withdraw()
         self.root.protocol("WM_DELETE_WINDOW", lambda: None)
 
+        self._track_monitor_timer: Optional[str] = None
+        self._device_monitor_timer: Optional[str] = None
+
+        self._action_queue: queue.Queue = queue.Queue()
+        self.root.bind("<<ActionQueue>>", lambda _event: self._process_action_queue())
+
         self.player = Player(volume=self.config.volume)
         self.player.load_library(self.config.music_dir)
 
@@ -170,23 +189,31 @@ class App:
             on_rescan=self.rescan_library,
         )
         self.tray = Tray(
-            on_settings=lambda: self.root.after_idle(self.settings.open),
-            on_toggle=lambda: self.root.after_idle(self.toggle_audio),
-            on_next=lambda: self.root.after_idle(self.next_track),
-            on_rescan=lambda: self.root.after_idle(self.rescan_library),
-            on_open_folder=lambda: self.root.after_idle(self.open_music_folder),
-            on_exit=self._on_exit,
+            on_settings=lambda: self.dispatch(self.settings.open),
+            on_toggle=lambda: self.dispatch(self.toggle_audio),
+            on_next=lambda: self.dispatch(self.next_track),
+            on_rescan=lambda: self.dispatch(self.rescan_library),
+            on_open_folder=lambda: self.dispatch(self.open_music_folder),
+            on_exit=lambda: self.dispatch(self._on_exit),
         )
+
+        if sys.platform == "darwin":
+            try:
+                from AppKit import NSApplication, NSImage
+
+                ns_img = NSImage.alloc().initWithContentsOfFile_(icon_path())
+                if ns_img:
+                    NSApplication.sharedApplication().setApplicationIconImage_(ns_img)
+            except Exception:
+                pass
 
         self.hotkeys.start()
         self.tray.start()
         self._update_tray_title()
         if self._single_instance:
             self._single_instance.listen_for_activation(
-                lambda: self.root.after_idle(self._on_activated_by_second_instance)
+                lambda: self.dispatch(self._on_activated_by_second_instance)
             )
-        self.root.after(1000, self._track_monitor)
-        self.root.after(2000, self._device_monitor)
         if not self.player.available:
             self.root.after(
                 400,
@@ -197,8 +224,32 @@ class App:
         self.settings.open()
         self.hud.show("LoFi HUD is already running", self.config, 3000)
 
-    def dispatch(self, action: str, *args: object) -> None:
-        self.root.after(0, self._run_action, action, *args)
+    def dispatch(self, action_or_fn: Any, *args: object) -> None:
+        """Thread-safe and PyObjC-safe dispatch onto the Tk event loop via event notification."""
+        self._action_queue.put((action_or_fn, args))
+        try:
+            self.root.event_generate("<<ActionQueue>>", when="tail")
+        except Exception:
+            try:
+                self.root.after_idle(self._process_action_queue)
+            except Exception:
+                pass
+
+    def _process_action_queue(self) -> None:
+        try:
+            while True:
+                action_or_fn, args = self._action_queue.get_nowait()
+                try:
+                    if callable(action_or_fn):
+                        action_or_fn(*args)
+                    elif isinstance(action_or_fn, str):
+                        self._run_action(action_or_fn, *args)
+                except Exception as exc:
+                    import traceback
+
+                    traceback.print_exc()
+        except queue.Empty:
+            pass
 
     def _run_action(self, action: str, *args: object) -> None:
         if action == "toggle":
@@ -248,11 +299,13 @@ class App:
         if self.player.play():
             self.toast("▶ Resumed", actions=True)
             self._update_tray_title()
+            self._sync_monitors()
 
     def force_pause(self) -> None:
         if self.player.pause():
             self.toast("⏸ Paused", actions=True)
             self._update_tray_title()
+            self._sync_monitors()
 
     def toggle_audio(self) -> None:
         if not self.player.available:
@@ -275,6 +328,7 @@ class App:
         elif result == "play":
             self.toast("▶ Resumed", actions=True)
             self._update_tray_title()
+        self._sync_monitors()
 
     def rescan_library(self) -> None:
         if not self.player.available:
@@ -287,18 +341,30 @@ class App:
         else:
             self.toast(f"Library Rescanned: {count} Tracks", actions=True)
         self._update_tray_title()
+        self._sync_monitors()
 
     def next_track(self) -> None:
         self.player.next()
+        self._update_tray_title()
+        if self.player.is_playing:
+            self._start_track_monitor(immediate=True)
 
     def prev_track(self) -> None:
         self.player.previous()
+        self._update_tray_title()
+        if self.player.is_playing:
+            self._start_track_monitor(immediate=True)
 
     def open_music_folder(self) -> None:
         try:
             if not os.path.exists(self.config.music_dir):
                 ensure_music_dir(self.config.music_dir)
-            os.startfile(self.config.music_dir)
+            if hasattr(os, "startfile"):
+                os.startfile(self.config.music_dir)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", self.config.music_dir])
+            else:
+                subprocess.Popen(["xdg-open", self.config.music_dir])
         except Exception:
             pass
 
@@ -343,6 +409,7 @@ class App:
 
     def apply_config(self, new_config: AppConfig) -> None:
         music_dir_changed = new_config.music_dir != self.config.music_dir
+        old_autopause = self.config.autopause_device
         self.config = new_config
         save_config(self.config)
         sync_autostart(self.config.autostart)
@@ -353,9 +420,50 @@ class App:
             ensure_music_dir(self.config.music_dir)
             self.player.load_library(self.config.music_dir)
             self._last_played_mrl = None
+        self._sync_monitors()
         self.toast("Settings Saved!")
 
+    def _sync_monitors(self) -> None:
+        if self.player.is_playing:
+            self._start_track_monitor(immediate=True)
+            self._start_device_monitor()
+        else:
+            self._stop_track_monitor()
+            self._stop_device_monitor()
+
+    def _start_track_monitor(self, immediate: bool = False) -> None:
+        self._stop_track_monitor()
+        if immediate:
+            self._track_monitor()
+        else:
+            self._track_monitor_timer = self.root.after(1500, self._track_monitor)
+
+    def _stop_track_monitor(self) -> None:
+        if self._track_monitor_timer is not None:
+            try:
+                self.root.after_cancel(self._track_monitor_timer)
+            except Exception:
+                pass
+            self._track_monitor_timer = None
+
+    def _start_device_monitor(self) -> None:
+        self._stop_device_monitor()
+        if self.config.autopause_device != "Disabled" and self.player.is_playing:
+            self._device_monitor_timer = self.root.after(2000, self._device_monitor)
+
+    def _stop_device_monitor(self) -> None:
+        if self._device_monitor_timer is not None:
+            try:
+                self.root.after_cancel(self._device_monitor_timer)
+            except Exception:
+                pass
+            self._device_monitor_timer = None
+
     def _track_monitor(self) -> None:
+        self._track_monitor_timer = None
+        if not self.player.is_playing:
+            return
+
         if self.player.is_media_playing():
             mrl = self.player.current_mrl()
             if mrl and mrl != self._last_played_mrl:
@@ -368,30 +476,31 @@ class App:
                         self.config.hud_song_timeout,
                     )
                 self._update_tray_title()
-        self.root.after(1000, self._track_monitor)
+
+        if self.player.is_playing:
+            self._track_monitor_timer = self.root.after(1500, self._track_monitor)
 
     def _device_monitor(self) -> None:
-        interval = 2000
+        self._device_monitor_timer = None
         target = self.config.autopause_device
-        if target == "Disabled":
-            # Disabled: reduce polling to save CPU cycles
-            interval = 5000
-        elif not self.player.is_playing:
-            # Paused/idle: device disconnection does not affect active audio
-            interval = 4000
-        else:
-            # Actively playing: check device quickly for responsive auto-pause
-            interval = 1500
-            active_names = get_active_audio_devices()
-            if target in active_names:
-                self._was_device_present = True
-            elif self._was_device_present:
-                self.force_pause()
-                self.hud.show("⏸ Auto-Paused (Device Disconnected)", self.config, 5000)
-                self._was_device_present = False
-        self.root.after(interval, self._device_monitor)
+        if target == "Disabled" or not self.player.is_playing:
+            return
+
+        active_names = get_active_audio_devices()
+        if target in active_names:
+            self._was_device_present = True
+        elif self._was_device_present:
+            self.force_pause()
+            self.hud.show("⏸ Auto-Paused (Device Disconnected)", self.config, 5000)
+            self._was_device_present = False
+            return
+
+        if self.player.is_playing and self.config.autopause_device != "Disabled":
+            self._device_monitor_timer = self.root.after(2000, self._device_monitor)
 
     def _on_exit(self, *_args: object) -> None:
+        self._stop_track_monitor()
+        self._stop_device_monitor()
         if self._single_instance:
             self._single_instance.release()
         self.hotkeys.stop()

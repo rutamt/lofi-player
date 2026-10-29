@@ -193,7 +193,6 @@ class _PosixSingleInstance:
         def _listener() -> None:
             while self._listening:
                 try:
-                    self._server_sock.settimeout(1.0)
                     conn, _ = self._server_sock.accept()
                     data = conn.recv(64)
                     conn.close()
@@ -202,8 +201,6 @@ class _PosixSingleInstance:
                             callback()
                         except Exception:
                             pass
-                except socket.timeout:
-                    continue
                 except OSError:
                     break
 
