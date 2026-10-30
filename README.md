@@ -1,4 +1,4 @@
-# LoFi HUD
+# LoFi HUD MAC IS DEPRECATED - [Check out my Native mac version](https://github.com/rutamt/lofi-hud-mac)
 
 A minimalist, zero-ad background audio daemon for Windows and macOS. 
 
