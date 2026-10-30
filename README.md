@@ -21,6 +21,9 @@ LoFi HUD operates silently in the system tray, responds to global hotkeys (and n
 
 ## 🚀 How to Install
 
+### Looking for a Mac release?
+Check out my native Mac port [here](https://github.com/rutamt/lofi-hud-mac)
+
 ### Option 1: One-Click Installer (Recommended)
 1. Download **`LoFiHUD_Setup_v1.0.0.exe`** from the [Releases](https://github.com/rutamt/lofi-player/releases) page.
 2. Run the installer wizard. No Administrator / UAC rights are required, and neither Python nor VLC needs to be pre-installed—everything is fully self-contained!
